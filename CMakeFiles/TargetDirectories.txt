@@ -1,0 +1,3 @@
+/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/CMakeFiles/securesort.dir
+/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/CMakeFiles/edit_cache.dir
+/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/CMakeFiles/rebuild_cache.dir
