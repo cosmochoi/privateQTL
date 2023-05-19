@@ -9,13 +9,11 @@ cmake_minimum_required(VERSION 3.18)
 project(securesort)
 set(CMAKE_CXX_COMPILER "/nfs/sw/gcc/gcc-11.2.0/bin/g++")
 
-add_executable(securesort sharing.cpp)
+add_executable(securesort sharing.cpp mpc.cpp utils.cpp)
 
 find_package(cryptoTools REQUIRED)
-
-target_link_libraries(securesort oc::cryptoTools -lstdc++)
+target_link_libraries(securesort oc::cryptoTools)
 # target_link_libraries(securesort -lcryptotools -lgmp -lgmpxx)
 target_compile_features(securesort PRIVATE cxx_std_14)
 # add_executable(mpc sharing.cpp)
 # target_link_libraries(mpc oc::cryptoTools)
-# target_link_libraries(securesort mpc.cpp)
