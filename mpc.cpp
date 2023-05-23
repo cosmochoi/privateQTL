@@ -105,7 +105,7 @@ void mpc::receiveSecrets()
     this->dataowner.recv(dest);
     // cout << "Size of input: " << dest[0] << endl;
     vector<vector<BitVector>> result;
-
+    this->inv = nearestPowerOf2(dest[0]);
     try {
     for (int i = 0; i < dest[0]; i++) {
         vector<BitVector> resultRow;
@@ -233,29 +233,46 @@ vector<uint64_t> mpc::Fmult(vector<uint64_t> k_i, vector<uint64_t> s_i)
     vector<uint64_t> t_i(2);
     uint64_t ri = k_i[0]*s_i[0] + k_i[1]*s_i[0] + k_i[0]*s_i[1];
     t_i[0]=ri;
-    this->toPlus.send(ri);
-    this->fromMinus.recv(t_i[1]);
+    this->toMinus.send(ri);
+    this->fromPlus.recv(t_i[1]);
     return t_i;
 }
 
-vector<vector<uint64_t>> mpc::genbitperm(vector<vector<uint64_t>> keybit)
-{
-    vector<vector<uint64_t>> f0(keybit.size(), vector<uint64_t>(2));
-    vector<vector<uint64_t>> f1(keybit.size(), vector<uint64_t>(2));
-    // vector<vector<uint64_t>> s(keybit.size(), vector<uint64_t>(2));
-    for (int i=0; i<keybit.size(); i++) 
-    {
-        vector<uint64_t> ones(keybit[i].size(), 1);
-        for (int j=0; j<keybit[i].size(); j++) 
-        {
-            f0[i][j] = ones[j]-keybit[i][j];
-            f1[i][j] = keybit[i][j];
-        }
-        
-    }
-
-    return keybit;
-}
+// vector<vector<uint64_t>> mpc::genbitperm(vector<vector<uint64_t>> keybit)
+// {
+//     vector<vector<uint64_t>> f0(keybit.size(), vector<uint64_t>(2));
+//     vector<vector<uint64_t>> f1(keybit.size(), vector<uint64_t>(2));
+//     vector<vector<uint64_t>> s0(keybit.size(), vector<uint64_t>(2));
+//     vector<vector<uint64_t>> s1(keybit.size(), vector<uint64_t>(2));
+//     // vector<vector<uint64_t>> s(keybit.size(), vector<uint64_t>(2));
+//     for (int i=0; i<keybit.size(); i++) 
+//     {
+//         vector<uint64_t> ones(keybit[i].size(), 1);
+//         for (int j=0; j<keybit[i].size(); j++) 
+//         {
+//             f0[i][j] = ones[j]-keybit[i][j];
+//             f1[i][j] = keybit[i][j];
+//         }
+//     }
+//      vector<vector<uint64_t>> s(keybit.size(), vector<uint64_t>(2));
+//     for (int i=0; i<keybit.size(); i++) 
+//     {
+//         for (int j=0; j<keybit[i].size(); j++)
+//         {
+//             s[i][j] += s[i][j]+f0[i][j];
+//         }
+//         s0[i] = s[i];
+//     }
+//     for (int i=0; i<keybit.size(); i++) 
+//     {
+//         for (int j=0; j<keybit[i].size(); j++)
+//         {
+//             s[i][j] += s[i][j]+f1[i][j];
+//         }
+//         s1[i] = s[i];
+//     }
+//     return keybit;
+// }
 
 void mpc::close()
 {

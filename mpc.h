@@ -6,6 +6,9 @@
 #include <cryptoTools/Network/Endpoint.h>
 #include <cryptoTools/Network/Channel.h>
 #include <cryptoTools/Common/Defines.h>
+#include <NTL/mat_ZZ_p.h>
+#include <NTL/ZZ.h>
+#include <NTL/ZZ_p.h>
 #include <map>
 #include <set>
 #include <bitset>
@@ -13,6 +16,7 @@
 
 using namespace osuCrypto;
 using namespace std;
+using namespace NTL;
 
 // struct Share;
 // struct Party;
@@ -61,6 +65,7 @@ public:
     IOService ios;
     PRNG globalprng;
     int pid;
+    uint32_t inv;
     mpc(){};
     bool initialize(int pid, string ownerIP, int ownerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2);
     bool setupChannels(string ownerIP, int ownerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2);
@@ -71,7 +76,7 @@ public:
     void reshare(vector<BitVector>& shares, int reshareID);
     void reshare(vector<BitVector>& shares);
     vector<uint64_t> Fmult(vector<uint64_t> k_i, vector<uint64_t> s_i);
-    vector<vector<uint64_t>> genbitperm(vector<vector<uint64_t>> keybit);
+    // vector<vector<uint64_t>> genbitperm(vector<vector<uint64_t>> keybit);
     void close();
 
 private:
@@ -104,4 +109,5 @@ void print_vector(vector<vector<T>> printme)
     }
     std::cout << "\n";
 }
+
 #endif

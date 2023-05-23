@@ -60,25 +60,51 @@ void dataclient(int sendport1, std::string address1, int sendport2, std::string 
     owner_p1.send(vectorsize);
     owner_p2.send(vectorsize);
     owner_p3.send(vectorsize);
+    uint32_t n = nearestPowerOf2(bitInput.size());
+    cout << "N: " << n << endl;
+    // int p = 11;
+    uint32_t p = PowerMod(3, -1, n);
+    cout << "P: " << p << endl;
+    // // making the shares
+    // for (int i=0; i < bitInput.size(); i++){
+    //     vector<BitVector> triples(3);
+    //     triples[2].assign(bitInput[i]);
+    //     for (int j = 0; j < 2; j++)
+    //     {
+    //         triples[j].assign(bitInput[i]);
+    //         triples[j].randomize(ownerprng);
+    //         triples[2] ^= triples[j];
+    //     }
 
-    // making the shares
-    for (int i=0; i < bitInput.size(); i++){
-        vector<BitVector> triples(3);
-        triples[2].assign(bitInput[i]);
-        for (int j = 0; j < 2; j++)
+    //     owner_p1.send(triples[0]);
+    //     owner_p1.send(triples[1]);
+    //     owner_p2.send(triples[1]);
+    //     owner_p2.send(triples[2]);
+    //     owner_p3.send(triples[2]);
+    //     owner_p3.send(triples[0]);
+    // }
+    for (int i=0; i< 3; i++)
+    {
+        BitVector bitSecret = bitInput[i];
+        int randomNumbers[3];
+        int sum =0;
+        cout << bitSecret << endl;
+        for (int j=3; j>=0; --j) //starting from the LSB
         {
-            triples[j].assign(bitInput[i]);
-            triples[j].randomize(ownerprng);
-            triples[2] ^= triples[j];
+            for (int m=0; i<3; m++)
+            {
+                randomNumbers[m] = ownerprng.get<uint32_t>();
+                sum += randomNumbers[m];
+            }
+            int result = sum % 11;
+            for (int m = 0; m < 3; m++) 
+            {
+            randomNumbers[m] = (randomNumbers[m] + (result - bitSecret[j]) + 11) % 11;
+            }
         }
-
-        owner_p1.send(triples[0]);
-        owner_p1.send(triples[1]);
-        owner_p2.send(triples[1]);
-        owner_p2.send(triples[2]);
-        owner_p3.send(triples[2]);
-        owner_p3.send(triples[0]);
+        
     }
+
     // auto share1_bytes = flatten(share1);
     // auto share2_bytes = flatten(share2);
     // auto share3_bytes = flatten(share3);
