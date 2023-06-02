@@ -6,7 +6,7 @@
 #include <cryptoTools/Network/Endpoint.h>
 #include <cryptoTools/Network/Channel.h>
 #include <cryptoTools/Common/Defines.h>
-#include <NTL/mat_ZZ_p.h>
+#include <NTL/vec_ZZ_p.h>
 #include <NTL/ZZ.h>
 #include <NTL/ZZ_p.h>
 #include <map>
@@ -18,71 +18,38 @@ using namespace osuCrypto;
 using namespace std;
 using namespace NTL;
 
-// struct Share;
-// struct Party;
-
-// struct Share
-// {
-//     Party *owner;
-//     int secret_id;
-//     vector<BitVector> replShares; //(a1, a2)
-//     Share(Party *o, int secret_id)
-//     {
-//         owner = o;
-//         this->secret_id = secret_id;
-//     }
-// };
-
-// struct Party
-// {
-//     int pid;
-//     set<Share *> shares;
-//     int numShares = 0;
-//     map<int, PRNG *> seedpair;
-//     explicit Party(int PID)
-//     {
-//         this->pid = PID;
-//     };
-//     void addShare(Share *share)
-//     {
-//         this->shares.insert(share);
-//         numShares++;
-//     }
-//     Share retrieveShares(int sID)
-//     {
-//         auto it = find_if(shares.begin(), shares.end(),
-//                           [sID](const Share *s)
-//                           { return s->secret_id == sID; });
-//     }
-// };
-
-// extern vector<double> CSVtoVector(string filename);
-// extern vector<uint64_t> ScaleVector(vector<double> &v, int k);
-
 class mpc
 {
 public:
     IOService ios;
     PRNG globalprng;
     int pid;
-    uint32_t inv;
+    uint64_t inv;
+    uint64_t lk;
+    uint64_t n;
     mpc(){};
     bool initialize(int pid, string ownerIP, int ownerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2);
     bool setupChannels(string ownerIP, int ownerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2);
     bool setupSeeds(); // shared seeds for PRNG
     void receiveSecrets();
-    vector<vector<uint64_t>> Frand(uint64_t bufferSize);
-    vector<vector<uint64_t>> reveal(vector<vector<uint64_t>> pi);
-    void reshare(vector<BitVector>& shares, int reshareID);
-    void reshare(vector<BitVector>& shares);
-    vector<uint64_t> Fmult(vector<uint64_t> k_i, vector<uint64_t> s_i);
-    // vector<vector<uint64_t>> genbitperm(vector<vector<uint64_t>> keybit);
+    vector<ZZ_p> Frand(uint64_t bufferSize);
+    vector<ZZ_p> reveal(vector<ZZ_p> &pi);
+    void reshare(vector<ZZ_p> &shares, int reshareID);
+    void reshare(vector<ZZ_p> &shares);
+    vector<ZZ_p> Fmult(vector<ZZ_p> k_i, vector<ZZ_p> s_i);
+    vector<ZZ_p> genbitperm(vector<ZZ_p> &keybit);
+    void apply_perm_local(vector<ZZ_p> &v, vector<ZZ_p> &pi);
+    void shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a);
+    void unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b);
+    void apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k);
+    void compose(vector<ZZ_p> &sigma, vector<ZZ_p> &rho);
+    void genperm(vector<ZZ_p> k);
     void close();
 
 private:
     block commonSeed = oc::toBlock(27);
     map<int, PRNG *> seedpair;
-    vector<vector<BitVector>> shares;
+    vector<ZZ_p> shares;
     Channel dataowner;
     Channel fromPlus;
     Channel fromMinus;
@@ -109,5 +76,15 @@ void print_vector(vector<vector<T>> printme)
     }
     std::cout << "\n";
 }
+template <typename T>
+void print_vector(Vec<T> printme)
+{
+    for (int i =0; i<printme.length(); i++)
+    {
+        std::cout << printme.get(i) << " ";
+    }
+    std::cout << "\n";
+}
+
 
 #endif

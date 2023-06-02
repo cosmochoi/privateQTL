@@ -3,6 +3,7 @@
 
 bool mpc::initialize(int pid, string ownerIP, int ownerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2)
 {
+    // ZZ_p::init(to_ZZ(4));
     this->pid = pid;
     globalprng.SetSeed(commonSeed);
     if (!setupChannels(ownerIP, ownerPort, address1, recPort1, sendPort1, address2, recPort2, sendPort2))
@@ -80,61 +81,38 @@ bool mpc::setupSeeds()
         cout << e.what() << std::endl;
     }
 
-    cout << "Party " << (this->pid + 1) % 3 << " and Party " << (this->pid + 2) % 3 << " seed setup complete." << endl;
+    // cout << "Party " << (this->pid + 1) % 3 << " and Party " << (this->pid + 2) % 3 << " seed setup complete." << endl;
     return true;
-}
-
-// Convert a one-dimensional byte vector into a vector<vector<BitVector>> object
-//might have to DELETE; double check
-std::vector<std::vector<BitVector>> unflatten(const std::vector<uint8_t>& data, size_t num_rows, size_t num_cols) {
-    std::vector<std::vector<BitVector>> result(num_rows, std::vector<BitVector>(num_cols));
-    size_t pos = 0;
-    for (size_t i = 0; i < num_rows; i++) {
-        for (size_t j = 0; j < num_cols; j++) {
-            size_t bitvec_size = result[i][j].sizeBytes();
-            std::memcpy(result[i][j].data(), data.data() + pos, bitvec_size);
-            pos += bitvec_size;
-        }
-    }
-    return result;
 }
 
 void mpc::receiveSecrets()
 {
-    vector<int> dest;
+    vector<uint64_t> dest;
     this->dataowner.recv(dest);
-    // cout << "Size of input: " << dest[0] << endl;
-    vector<vector<BitVector>> result;
-    this->inv = nearestPowerOf2(dest[0]);
-    try {
-    for (int i = 0; i < dest[0]; i++) {
-        vector<BitVector> resultRow;
-        for (int j = 0; j < 2; j++) {
-            BitVector received_data;
+    ZZ_p::init(to_ZZ(dest[2])); ///p
+    this->n = dest[0]; //number of secrets
+    this->lk = dest[1]; //number of bits
+    this->inv = dest[3]; //inv 
+    vector<uint64_t> result;
+    try 
+    {
+        for (int i = 0; i < dest[0]*dest[1]*2; i++) 
+        {
+            uint64_t received_data;
             this->dataowner.recv(received_data);
-            resultRow.push_back(received_data);
+            result.push_back(received_data);
         }
-        result.push_back(resultRow);
-    }
-
-        this->shares = result;
-        // cout << "Final size of vector " << this->shares.size() << endl;
-        // print_vector(result);
+        vector<ZZ_p> temp(result.begin(), result.end());
+        swap(this->shares, temp);
     }
     catch (const exception &e)
     {
         cout << "except\n";
         cout << e.what() << endl;
     }
-    cout << this->shares[0][0][0] << endl;
-    cout << this->shares[0][1][0] << endl;
-    vector<uint64_t> ki{this->shares[0][0][0],this->shares[0][1][0]};
-    vector<uint64_t> mult;
-    mult = Fmult(ki, ki);
-    print_vector(mult);
 }
 
-vector<vector<uint64_t>> mpc::Frand(uint64_t bufferSize) 
+vector<ZZ_p> mpc::Frand(uint64_t bufferSize) 
 {
     if (bufferSize <= 1)
     {
@@ -144,135 +122,338 @@ vector<vector<uint64_t>> mpc::Frand(uint64_t bufferSize)
     PRNG &plus_PRNG = *(plus_it->second);
     auto minus_it = this->seedpair.find((this->pid + 2) % 3);
     PRNG &minus_PRNG = *(minus_it->second);
-    vector<vector<uint64_t>> pi(2,vector<uint64_t>(bufferSize));
+    vector<uint64_t> pi(2*bufferSize);
     for (uint64_t i = 0; i < bufferSize; i++)
     {
-        pi[0][i] = i + 1;
+        pi[i*2+0] = i + 1;
+        pi[i*2+1] = i + 1;
     }
     for (uint64_t i = bufferSize - 1; i >= 1; i--)
     {
         uint64_t j = minus_PRNG.get<uint64_t>() % (i + 1);
-        uint64_t temp = pi[0][i];
-        pi[0][i] = pi[0][j];
-        pi[0][j] = temp;
+        uint64_t temp = pi[i*2+0];
+        pi[i*2+0] = pi[j*2+0];
+        pi[j*2+0] = temp;
+
+        uint64_t k = plus_PRNG.get<uint64_t>() % (i + 1);
+        uint64_t temp2 = pi[i*2+1];
+        pi[i*2+1] = pi[k*2+1];
+        pi[k*2+1] = temp2;
     }
-    for (uint64_t i = 0; i < bufferSize; i++)
-    {
-        pi[1][i] = i + 1;
-    }
-    for (uint64_t i = bufferSize - 1; i >= 1; i--)
-    {
-        uint64_t j = plus_PRNG.get<uint64_t>() % (i + 1);
-        uint64_t temp = pi[1][i];
-        pi[1][i] = pi[1][j];
-        pi[1][j] = temp;
-    }
-    // print_vector(pi);
-    return pi;
+
+    vector<ZZ_p> ZZ_pi(pi.begin(), pi.end());
+
+    return ZZ_pi;
 }
 
-vector<vector<uint64_t>> mpc::reveal(vector<vector<uint64_t>> pi)
+vector<ZZ_p> mpc::reveal(vector<ZZ_p>& pi)
 {
-    this->toPlus.send(pi[0]);
-    this->toMinus.send(pi[1]);
+    vector<uint64_t> share1;
+    vector<uint64_t> share2;
+    for (int i=0; i<pi.size(); i+=2)
+    {
+        share1.push_back(conv<uint64_t>(pi[i]));
+        share2.push_back(conv<uint64_t>(pi[i+1]));
+    }
+    this->toPlus.send(share1);
+    this->toMinus.send(share2);
     vector<uint64_t> receivedMinus, receivedPlus;
     this->fromMinus.recv(receivedMinus);
     this->fromPlus.recv(receivedPlus);
-    vector<vector<uint64_t>> reconstructed;
-    if (receivedMinus != receivedPlus) {
+    vector<ZZ_p> reconstructed;
+    if (receivedMinus != receivedPlus) 
+    {
         throw string("received inputs do not match.");
     }
-    else {
-        reconstructed.push_back(receivedMinus);
-        reconstructed.push_back(pi[0]);
-        reconstructed.push_back(pi[1]);
+    else 
+    {
+        for (int i=0; i<receivedMinus.size(); i++)
+        {
+            reconstructed.push_back(conv<ZZ_p>(receivedMinus[i])+conv<ZZ_p>(share1[i])+conv<ZZ_p>(share2[i]));
+        }
     }
     return reconstructed;
 }
 
-void mpc::reshare(vector<BitVector>& shares, int reshareID)
+void mpc::reshare(vector<ZZ_p>& shares, int reshareID)
 {
-    auto plus_it = this->seedpair.find((this->pid + 1) % 3);
-    PRNG &plus_PRNG = *(plus_it->second);
-    auto minus_it = this->seedpair.find((this->pid + 2) % 3);
-    PRNG &minus_PRNG = *(minus_it->second);
-    BitVector r_i, r_iplus;
-    for (uint32_t i = 0; i < shares[0].size(); i++) {
-        bool randomBit = minus_PRNG.get<bool>();  
-        r_i[i] = randomBit;     
-    }
-    for (uint32_t i = 0; i < shares[1].size(); i++) {
-        bool randomBit = plus_PRNG.get<bool>(); 
-        r_iplus[i] = randomBit;     
-    }
-    vector<BitVector> newshare{shares[0]^r_i, shares[1]^r_iplus};
-    if (reshareID == (this->pid + 1) % 3)
+    vector<ZZ_p> randoms(3);
+    if (reshareID == (this->pid + 1) % 3) // share to plus
     {
-        this->toPlus.send(shares[1]^r_iplus);
+        auto minus_it = this->seedpair.find((this->pid + 2) % 3);
+        PRNG &minus_PRNG = *(minus_it->second);
+        for (int i=0; i<2; i++)
+        {
+            randoms[i] = to_ZZ_p(minus_PRNG.get<uint32_t>());
+        }
+        randoms[2] = -randoms[0]-randoms[1];
+        for (int j=0; j<shares.size()/2; j++)
+        {
+            shares[2*j]+=randoms[this->pid];
+            shares[2*j+1]+=randoms[(this->pid +1)%3];
+            this->toPlus.send(conv<uint64_t>(shares[2*j+1]));
+        }
     }
-    else 
+    else  //share to minus
     {
-        this->toMinus.send(shares[0]^r_i);
+        auto plus_it = this->seedpair.find((this->pid + 1) % 3);
+        PRNG &plus_PRNG = *(plus_it->second);
+        for (int i=0; i<2; i++)
+        {
+            randoms[i] = to_ZZ_p(plus_PRNG.get<uint32_t>());
+        }
+        randoms[2] = -randoms[0]-randoms[1];
+        for (int j=0; j<shares.size()/2; j++)
+        {
+            shares[2*j]+=randoms[this->pid];
+            shares[2*j+1]+=randoms[(this->pid +1)%3];
+            this->toMinus.send(conv<uint64_t>(shares[2*j]));
+        }
     }
-    shares = newshare;
 }
 
-void mpc::reshare(vector<BitVector>& shares)
+void mpc::reshare(vector<ZZ_p> &shares)
 {
-    // vector<BitVector> newshare(2);
-    this->fromMinus.recv(shares[0]);
-    this->fromPlus.recv(shares[1]);
-    // shares = newshare;
+    vector<uint64_t> newshare(shares.size());
+    for (int i=0; i<shares.size()/2; i++)
+    {
+        this->fromMinus.recv(newshare[2*i]);
+        this->fromPlus.recv(newshare[2*i+1]);
+    }
+    vector<ZZ_p> temp(newshare.begin(), newshare.end());
+    shares.swap(temp);
 }
 
 //is adding alpha beta gamma necessary? 
-vector<uint64_t> mpc::Fmult(vector<uint64_t> k_i, vector<uint64_t> s_i)
+vector<ZZ_p> mpc::Fmult(vector<ZZ_p> k_i, vector<ZZ_p> s_i)
 {
     auto minus_it = this->seedpair.find((this->pid + 2) % 3);
     PRNG &minus_PRNG = *(minus_it->second);
-    vector<uint64_t> t_i(2);
-    uint64_t ri = k_i[0]*s_i[0] + k_i[1]*s_i[0] + k_i[0]*s_i[1];
+    vector<ZZ_p> t_i(2);
+    ZZ_p ri = k_i[0]*s_i[0] + k_i[1]*s_i[0] + k_i[0]*s_i[1];
     t_i[0]=ri;
-    this->toMinus.send(ri);
-    this->fromPlus.recv(t_i[1]);
+    this->toMinus.send(conv<int>(ri));
+    int received_data;
+    this->fromPlus.recv(received_data);
+    conv(t_i[1], received_data);
     return t_i;
 }
 
-// vector<vector<uint64_t>> mpc::genbitperm(vector<vector<uint64_t>> keybit)
-// {
-//     vector<vector<uint64_t>> f0(keybit.size(), vector<uint64_t>(2));
-//     vector<vector<uint64_t>> f1(keybit.size(), vector<uint64_t>(2));
-//     vector<vector<uint64_t>> s0(keybit.size(), vector<uint64_t>(2));
-//     vector<vector<uint64_t>> s1(keybit.size(), vector<uint64_t>(2));
-//     // vector<vector<uint64_t>> s(keybit.size(), vector<uint64_t>(2));
-//     for (int i=0; i<keybit.size(); i++) 
-//     {
-//         vector<uint64_t> ones(keybit[i].size(), 1);
-//         for (int j=0; j<keybit[i].size(); j++) 
-//         {
-//             f0[i][j] = ones[j]-keybit[i][j];
-//             f1[i][j] = keybit[i][j];
-//         }
-//     }
-//      vector<vector<uint64_t>> s(keybit.size(), vector<uint64_t>(2));
-//     for (int i=0; i<keybit.size(); i++) 
-//     {
-//         for (int j=0; j<keybit[i].size(); j++)
-//         {
-//             s[i][j] += s[i][j]+f0[i][j];
-//         }
-//         s0[i] = s[i];
-//     }
-//     for (int i=0; i<keybit.size(); i++) 
-//     {
-//         for (int j=0; j<keybit[i].size(); j++)
-//         {
-//             s[i][j] += s[i][j]+f1[i][j];
-//         }
-//         s1[i] = s[i];
-//     }
-//     return keybit;
-// }
+vector<ZZ_p> mpc::genbitperm(vector<ZZ_p> &keybit)
+{
+    vector<ZZ_p> f0(keybit.size()), f1(keybit.size()), s0(keybit.size()), s1(keybit.size());
+    vector<ZZ_p> s(2, to_ZZ_p(0));
+    vector<ZZ_p> p;
+    f1 = keybit;
+    for (int i=0; i<keybit.size()/2; i++)
+    {
+        f0[2*i] = this->inv-keybit[2*i];
+        f0[2*i+1] = this->inv-keybit[2*i+1];
+        s[0]+=f0[2*i];
+        s[1]+=f0[2*i+1];
+        s0[2*i] = s[0];
+        s0[2*i+1] = s[1];
+    }
+    for (int i=0; i<keybit.size()/2; i++)
+    {
+        s[0]+=f1[2*i];
+        s[1]+=f1[2*i+1];
+        s1[2*i] = s[0];
+        s1[2*i+1] = s[1];
+    }
+    vector<ZZ_p> t;
+    for (int i=0; i <keybit.size()/2; i++)
+    {
+        vector<ZZ_p> sminus(2);
+        vector<ZZ_p> ti(2);
+        sminus[0] = s1[2*i] - s0[2*i];
+        sminus[1] = s1[2*i+1] - s0[2*i+1];
+        vector<ZZ_p> ki(keybit.begin()+2*i, keybit.begin()+2*(i+1));
+        ti = Fmult(ki, sminus);
+        t.insert(t.end(), ti.begin(), ti.end());
+    }
+    for (int m=0; m<keybit.size(); m++)
+    {
+        p.push_back(s0[m]+t[m]);
+    }
+    return p;
+}
+
+vector<ZZ_p> inversePerm(vector<ZZ_p> pi)
+{
+    vector<uint64_t> arr2(pi.size());
+    vector<ZZ_p> inverse(pi.size());
+    for (int i = 0; i < pi.size(); i++)
+        arr2[conv<int>(pi[i]) - 1] = i + 1;
+ 
+    for (int i = 0; i < pi.size(); i++)
+    {
+        inverse[i] = conv<ZZ_p>(arr2[i]);
+    }
+    return inverse;
+}
+
+void mpc::apply_perm_local(vector<ZZ_p> &v, vector<ZZ_p> &pi)
+{
+    if (pi.size() != v.size()/2)
+        throw std::invalid_argument("local permutation should be half the size of shared vector");
+    vector<ZZ_p> v2(v.size());
+    for (size_t i = 0; i < v.size()/2; i++)
+    {
+        uint64_t pi_i = conv<uint64_t>(pi[i]);
+        // uint64_t pi2 = conv<uint64_t>(pi[2*i+1]);
+        v2[(pi_i-1)*2] =v[2*i];
+        v2[(pi_i-1)*2+1]=v[2*i+1];
+    }
+
+    vector<ZZ_p> testing;
+    testing = inversePerm(pi);
+    v = std::move(v2);
+}
+void mpc::shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a)
+{
+    if (pi.size() != a.size())
+        throw std::invalid_argument("Your shares and pi size are different");
+    vector<ZZ_p> pi_m(pi.size()/2), pi_p(pi.size()/2);
+    for (int i=0; i<pi.size()/2; i++)
+    {
+        pi_m[i] = pi[2*i];
+        pi_p[i] = pi[2*i+1];
+    }
+
+    if (this->pid == 0)
+    {
+        apply_perm_local(a, pi_m);
+        reshare(a, 1);
+        apply_perm_local(a, pi_p);
+        reshare(a, 2);
+        reshare(a);
+    }
+    else if (this->pid == 1)
+    {
+        reshare(a);
+        apply_perm_local(a, pi_m);
+        reshare(a, 2);
+        apply_perm_local(a, pi_p);
+        reshare(a, 0);
+    }
+    else
+    {
+        apply_perm_local(a, pi_p);
+        reshare(a, 1);
+        reshare(a);
+        apply_perm_local(a, pi_m);
+        reshare(a, 0);
+    }
+}
+
+void mpc::unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b)
+{
+    vector<ZZ_p> pi_m, pi_p;
+    for (size_t i=0; i<pi.size()/2; i++)
+    {
+        pi_m.push_back(pi[2*i]);
+        pi_p.push_back(pi[2*i+1]);
+    }
+    vector<ZZ_p> inv_m(pi_m.size()), inv_p(pi_p.size());
+    inv_m = inversePerm(pi_m);
+    inv_p = inversePerm(pi_p); 
+    if (this->pid == 0)
+    {
+        reshare(b);
+        apply_perm_local(b,inv_p);
+        reshare(b,2);
+        apply_perm_local(b,inv_m);
+        reshare(b,1);
+    }
+    else if (this->pid == 1)
+    {
+        apply_perm_local(b,inv_p);
+        reshare(b, 0);
+        apply_perm_local(b,inv_m);
+        reshare(b, 2);
+        reshare(b);
+    }
+    else
+    {
+        apply_perm_local(b,inv_m);
+        reshare(b, 0);
+        reshare(b);
+        apply_perm_local(b,inv_p);
+        reshare(b, 1);
+    }
+}
+
+void mpc::apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k)
+{
+    
+    if (rho.size() != k.size())
+        throw std::invalid_argument("rho and k size don't match");
+    vector<ZZ_p> pi=Frand(k.size()/2);
+    
+    shuffle(pi, rho);
+    shuffle(pi, k);
+    vector<ZZ_p> reconstructed = reveal(rho);
+    apply_perm_local(k, reconstructed);
+    // print_vector(k);
+}
+
+void mpc::compose(vector<ZZ_p> &sigma, vector<ZZ_p> &rho)
+{
+    vector<ZZ_p> pi=Frand(sigma.size()/2);
+    shuffle(pi,sigma);
+    vector<ZZ_p> reconstructed = reveal(sigma);
+    // print_vector(reconstructed);
+    vector<ZZ_p> sigma_inv = inversePerm(reconstructed);
+    apply_perm_local(rho, sigma_inv);
+    unshuffle(pi, rho);
+    // return rho;
+}
+void writeVectorToCSV(const std::vector<NTL::ZZ_p>& data, int pid)
+{
+    std::string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/output_" + std::to_string(pid) + ".csv";
+    std::ofstream file(filename);
+    if (file.is_open())
+    {
+        for (const NTL::ZZ_p& value : data)
+        {
+            file << value << ",";
+        }
+        file.close();
+        std::cout << "Vector successfully written to CSV file." << std::endl;
+    }
+    else
+    {
+        std::cout << "Error opening the file." << std::endl;
+    }
+}
+void mpc::genperm(vector<ZZ_p> k)
+{
+    vector<ZZ_p> k_i(this->lk);
+    k_i.assign(this->shares.begin(), this->shares.begin() + 2*this->n);
+    // vector<ZZ_p> reconstructed_sigma = reveal(k_i);
+    // cout <<this->lk <<endl;
+    vector<ZZ_p> sigma = genbitperm(k_i);
+    vector<ZZ_p> rho(sigma.size());
+    for (int i=1; i<this->lk; i++)
+    {
+        k_i.assign(this->shares.begin() + 2*this->n * i, this->shares.begin() + 2*this->n * (i + 1));
+        // vector<ZZ_p> reconstructed_sigma = reveal(k_i);
+        // print_vector(reconstructed_sigma);
+        vector<ZZ_p> prev_sigma(sigma);
+        apply_shared_perm(sigma, k_i);
+        rho = genbitperm(k_i);
+        
+        
+        compose(prev_sigma, rho);
+        swap(sigma,rho);
+        // sigma=rho;    
+    }
+    vector<ZZ_p> reconstructed = reveal(sigma);
+    writeVectorToCSV(reconstructed, this->pid);
+
+
+}
 
 void mpc::close()
 {

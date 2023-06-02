@@ -2,6 +2,7 @@
 #include "mpc.h"
 #include <cmath>
 #include "utils.h"
+#include <chrono>
 
 // Define the function to be computed
 bool computeFunction(bool x1, bool x2, bool x3)
@@ -21,19 +22,6 @@ void bitdecompose(vector<uint64_t> &secrets, vector<BitVector> *bitInput)
     }
 }
 
-// Flatten a vector<vector<BitVector>> object into a one-dimensional byte vector
-vector<uint8_t> flatten(const vector<vector<BitVector>>& data) {
-  vector<uint8_t> result;
-  for (const auto& row : data) {
-    for (const auto& elem : row) {
-      const uint8_t* bytes = elem.data();
-      size_t num_bytes = elem.sizeBytes();
-      result.insert(result.end(), bytes, bytes + num_bytes);
-    }
-  }
-  return result;
-}
-
 void dataclient(int sendport1, std::string address1, int sendport2, std::string address2, int sendport3, std::string address3)
 {
     IOService ios;
@@ -44,104 +32,44 @@ void dataclient(int sendport1, std::string address1, int sendport2, std::string 
     Channel owner_p2 = epsend2.addChannel();
     Channel owner_p3 = epsend3.addChannel();
     cout << "Owner established channels with the computing parties.\n";
-    PRNG ownerprng;
-    ownerprng.SetSeed(toBlock(27));
+    // PRNG ownerprng;
+    // ownerprng.SetSeed(toBlock(27));
 
-    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/testdata.txt";
+    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/testdata3.txt";
     vector<BitVector> bitInput; // bitvector representation of input
     vector<double> input = CSVtoVector(filename);
-    vector<uint64_t> secrets = ScaleVector(input, pow(10,3)); // integer version of secret
+    vector<uint64_t> secrets = ScaleVector(input, pow(10,5)); // integer version of secret
+    // print_vector(secrets);
     bitdecompose(secrets, &bitInput);
 
-    // print_vector(secrets);
-    // print_vector(bitInput);
-
-    vector<size_t> vectorsize{bitInput.size()};
+    NTL::SetSeed((NTL::conv<NTL::ZZ>((long)27))); // Seed change
+    uint64_t p = nearestPowerOf2(bitInput.size());
+    ZZ_p::init(to_ZZ(p)); 
+    uint64_t inv = PowerMod(3, -1, p);
+    vector<uint64_t> vectorsize{bitInput.size(), bitInput[0].size(), p, inv};
+    // cout << "sent size: " << bitInput.size() << endl;
     owner_p1.send(vectorsize);
     owner_p2.send(vectorsize);
     owner_p3.send(vectorsize);
-    uint32_t n = nearestPowerOf2(bitInput.size());
-    cout << "N: " << n << endl;
-    // int p = 11;
-    uint32_t p = PowerMod(3, -1, n);
-    cout << "P: " << p << endl;
-    // // making the shares
-    // for (int i=0; i < bitInput.size(); i++){
-    //     vector<BitVector> triples(3);
-    //     triples[2].assign(bitInput[i]);
-    //     for (int j = 0; j < 2; j++)
-    //     {
-    //         triples[j].assign(bitInput[i]);
-    //         triples[j].randomize(ownerprng);
-    //         triples[2] ^= triples[j];
-    //     }
-
-    //     owner_p1.send(triples[0]);
-    //     owner_p1.send(triples[1]);
-    //     owner_p2.send(triples[1]);
-    //     owner_p2.send(triples[2]);
-    //     owner_p3.send(triples[2]);
-    //     owner_p3.send(triples[0]);
-    // }
-    for (int i=0; i< 3; i++)
+    // print_vector(bitInput);
+    // making the shares: for each bit, loop through secrets
+    for (int j=bitInput[0].size()-1; j >=0; j--)
     {
-        BitVector bitSecret = bitInput[i];
-        int randomNumbers[3];
-        int sum =0;
-        cout << bitSecret << endl;
-        for (int j=3; j>=0; --j) //starting from the LSB
+        for (int i=0; i<bitInput.size(); i++)
         {
-            for (int m=0; i<3; m++)
-            {
-                randomNumbers[m] = ownerprng.get<uint32_t>();
-                sum += randomNumbers[m];
-            }
-            int result = sum % 11;
-            for (int m = 0; m < 3; m++) 
-            {
-            randomNumbers[m] = (randomNumbers[m] + (result - bitSecret[j]) + 11) % 11;
-            }
+            ZZ_p x1 = random_ZZ_p();
+            ZZ_p x2 = random_ZZ_p();
+            ZZ_p x3 = to_ZZ_p(bitInput[i][j]) - x1 - x2;
+            owner_p1.send(conv<uint64_t>(x1));
+            owner_p1.send(conv<uint64_t>(x2));
+            owner_p2.send(conv<uint64_t>(x2));
+            owner_p2.send(conv<uint64_t>(x3));
+            owner_p3.send(conv<uint64_t>(x3));
+            owner_p3.send(conv<uint64_t>(x1));
         }
-        
     }
 
-    // auto share1_bytes = flatten(share1);
-    // auto share2_bytes = flatten(share2);
-    // auto share3_bytes = flatten(share3);
-    // cout << "Data owner sending shares to parties:\n";
-    // owner_p1.send(span<uint8_t>(share1_bytes.data(), share1_bytes.size()));
-    // owner_p2.send(span<uint8_t>(share2_bytes.data(), share2_bytes.size()));
-    // owner_p3.send(span<uint8_t>(share3_bytes.data(), share3_bytes.size()));
 
-    // // sharing shares to each party
-    // for (size_t i = 0; i < triples.size(); ++i)
-    // {
-    //     // Determine which element to send
-    //     BitVector current = triples[i];
-    //     BitVector next = triples[(i + 1) % triples.size()];
-
-    //     // Create a vector of size 2 containing the elements
-    //     // std::vector<BitVector> v{current, next};
-    //     // Send the vector to the corresponding party
-    //     if (i == 0)
-    //     {
-    //         // Send vector[0], vector[1] to party1
-    //         owner_p1.send(current);
-    //         owner_p1.send(next);
-    //     }
-    //     else if (i == 1)
-    //     {
-    //         // Send vector[1], vector[2] to party2
-    //         owner_p2.send(current);
-    //         owner_p2.send(next);
-    //     }
-    //     else if (i == 2)
-    //     {
-    //         // Send vector[2], vector[0] to party3
-    //         owner_p3.send(current);
-    //         owner_p3.send(next);
-    //     }
-    // }
     owner_p1.close();
     owner_p2.close();
     owner_p3.close();
@@ -212,14 +140,64 @@ void dataclient(int sendport1, std::string address1, int sendport2, std::string 
 //     chl2.close();
 //     chl3.close();
 // }
+vector<ZZ_p> convert(vector<int> input)
+{
+    vector<ZZ_p> output;
+    for (int i=0; i<input.size(); i++)
+    {
+        output.push_back(conv<ZZ_p>(input[i]));
+    }
+    return output;
+}
 void runMPC(int pid, const string ownerIP, int ownerPort, const string address1, int recPort1, int sendPort1, const string address2, int recPort2, int sendPort2)
 {
     mpc testmpc;
     std::promise<void> promise;
     std::future<void> future = promise.get_future();
+    ZZ_p::init(to_ZZ(16));
+    
+    // cout << conv<int>(testvec[0]) <<endl;
     testmpc.initialize(pid, ownerIP, ownerPort, address1, recPort1, sendPort1, address2, recPort2, sendPort2);
     testmpc.receiveSecrets();
-    testmpc.Frand(5);
+    vector<int> input, rho, sigma;
+    vector<ZZ_p> testvec, rhoZZ, sigmaZZ;
+    if (pid == 0) {
+        input={6,4,8,8,3,2,9,2,7,9,5,3,4,6,3,10,1,13,12,2,7,8,5,2};
+        testvec = convert(input);
+        rho={3,13,6,4,8,7,5,3};
+        rhoZZ=convert(rho);
+        sigma={2,8,8,6,9,5,11,3};
+        sigmaZZ=convert(sigma);
+    }
+    else if (pid ==1) {
+        input={4,6,8,0,2,12,2,6,9,0,3,9,6,6,10,4,13,3,2,3,8,2,2,9};
+        testvec = convert(input);
+        rho={13,2,4,9,7,5,3,9};
+        rhoZZ=convert(rho);
+        sigma={8,7,6,5,5,4,3,6};
+        sigmaZZ=convert(sigma);
+    } 
+    else {
+        input={6,6,0,8,12,3,6,9,0,7,9,5,6,4,4,3,3,1,3,12,2,7,9,5};
+        testvec = convert(input);
+        rho={2,3,9,6,5,8,9,5};
+        rhoZZ=convert(rho);
+        sigma={7,2,5,8,4,9,6,11};
+        sigmaZZ=convert(sigma);
+    }
+    testmpc.genperm(testvec);   
+    // vector<ZZ_p> og{to_ZZ_p(4),to_ZZ_p(2),to_ZZ_p(1),to_ZZ_p(3)};
+    // vector<ZZ_p> randpi=testmpc.Frand(4);
+    // testmpc.shuffle(randpi, testvec);
+    // testmpc.unshuffle(randpi, testvec);
+    // vector<ZZ_p> testresult = testmpc.genbitperm(testvec);
+    // vector<ZZ_p> reconstructed = testmpc.reveal(testresult);
+    // testmpc.apply_shared_perm(testresult, testvec);
+    // vector<ZZ_p> sigma
+    // testmpc.compose(sigmaZZ,rhoZZ);
+    // vector<ZZ_p> test = testmpc.reveal(rhoZZ);
+    // testmpc.apply_perm_local(og, rho);
+    // print_vector(test);
     promise.set_value(); // signal that initialization is done
     future.get();        // wait for all threads to finish
     testmpc.close();
@@ -251,6 +229,7 @@ int main()
     // bitdecompose(secrets, &bitInput);
     // print_vector(secrets);
     // print_vector(bitInput);
+    auto start = std::chrono::high_resolution_clock::now();
     vector<std::future<void>> futures;
     futures.push_back(async(launch::async, dataclient, owner1, address1, owner2, address2, owner3, address3));
     futures.push_back(async(launch::async, runMPC, 0, "localhost", owner1, address2, port12, port21, address3, port13, port31));
@@ -268,9 +247,10 @@ int main()
             cerr << "Exception caught: " << e.what() << std::endl;
         }
     }
-    // t1.join();
-    // t2.join();
-    // t3.join();
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end - start;
+    double durationInSeconds = duration.count();
+    std::cout << "Execution time: " << durationInSeconds << " seconds" << std::endl;
 
     return 0;
 }
