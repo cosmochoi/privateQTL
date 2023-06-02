@@ -66,8 +66,6 @@ bool mpc::setupSeeds()
         // retrieve uint64_t from buffer
         uint64_t minusSeed = dest[0];
 
-        // PRNG wPlus(oc::toBlock(plusSeed));
-        // PRNG wMinus(oc::toBlock(minusSeed));
         PRNG *wPlus = new PRNG(oc::toBlock(plusSeed));
         PRNG *wMinus = new PRNG(oc::toBlock(minusSeed));
 
@@ -81,7 +79,6 @@ bool mpc::setupSeeds()
         cout << e.what() << std::endl;
     }
 
-    // cout << "Party " << (this->pid + 1) % 3 << " and Party " << (this->pid + 2) % 3 << " seed setup complete." << endl;
     return true;
 }
 
@@ -429,7 +426,7 @@ void writeVectorToCSV(const std::vector<NTL::ZZ_p>& data, int pid)
 }
 void mpc::genperm(vector<ZZ_p> k)
 {
-    vector<ZZ_p> k_i(this->lk);
+    vector<ZZ_p> k_i(2*this->n);
     k_i.assign(this->shares.begin(), this->shares.begin() + 2*this->n);
     // vector<ZZ_p> reconstructed_sigma = reveal(k_i);
     // cout <<this->lk <<endl;
@@ -451,8 +448,6 @@ void mpc::genperm(vector<ZZ_p> k)
     }
     vector<ZZ_p> reconstructed = reveal(sigma);
     writeVectorToCSV(reconstructed, this->pid);
-
-
 }
 
 void mpc::close()

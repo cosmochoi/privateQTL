@@ -21,6 +21,38 @@ vector<double> CSVtoVector(string filename)
     return input_vec;
 }
 
+std::vector<double> getRowFromMatrixFile(const std::string& filename, int rowIndex) {
+    std::vector<double> rowVector;
+
+    std::ifstream data(filename);
+    std::string line;
+    int currentRow = 0;
+    while (std::getline(data, line)) {
+        if (currentRow == 0) {
+            // Skip the first row (header)
+            currentRow++;
+            continue;
+        }
+        if (currentRow-1 == rowIndex) {
+            std::stringstream lineStream(line);
+            std::string cell;
+
+            while (std::getline(lineStream, cell, '\t')) 
+            {
+                try {
+                double entry = std::stod(cell);
+                rowVector.push_back(entry);
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "Exception caught: " << e.what() << std::endl;
+                }
+            }
+        }
+        currentRow++;
+    }
+    return rowVector;
+}
+
 vector<uint64_t> ScaleVector(vector<double> &v, int k)
 {
     vector<uint64_t> intvec(v.size(), 0);

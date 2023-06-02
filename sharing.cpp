@@ -35,9 +35,9 @@ void dataclient(int sendport1, std::string address1, int sendport2, std::string 
     // PRNG ownerprng;
     // ownerprng.SetSeed(toBlock(27));
 
-    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/testdata3.txt";
+    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/samplewise_QN.tsv";
     vector<BitVector> bitInput; // bitvector representation of input
-    vector<double> input = CSVtoVector(filename);
+    vector<double> input = getRowFromMatrixFile(filename,0);
     vector<uint64_t> secrets = ScaleVector(input, pow(10,5)); // integer version of secret
     // print_vector(secrets);
     bitdecompose(secrets, &bitInput);
