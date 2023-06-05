@@ -22,7 +22,7 @@ void bitdecompose(vector<uint64_t> &secrets, vector<BitVector> *bitInput)
     }
 }
 
-void dataclient(int sendport1, std::string address1, int sendport2, std::string address2, int sendport3, std::string address3)
+void dataclient(int sendport1, std::string address1, int sendport2, std::string address2, int sendport3, std::string address3, int r)
 {
     IOService ios;
     Endpoint epsend1(ios, address1, sendport1, EpMode::Server);
@@ -37,7 +37,7 @@ void dataclient(int sendport1, std::string address1, int sendport2, std::string 
 
     string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/samplewise_QN.tsv";
     vector<BitVector> bitInput; // bitvector representation of input
-    vector<double> input = getRowFromMatrixFile(filename,0);
+    vector<double> input = getRowFromMatrixFile(filename,r);
     vector<uint64_t> secrets = ScaleVector(input, pow(10,5)); // integer version of secret
     // print_vector(secrets);
     bitdecompose(secrets, &bitInput);
@@ -76,70 +76,6 @@ void dataclient(int sendport1, std::string address1, int sendport2, std::string 
     cout << "Sent secret shared values to parties.\n";
 }
 
-// void party(int id, int ownerport, int recPort1, int recPort2, bool input, std::string address1, int sendport1, std::string address2, int sendport2)
-// {
-//     // Initialize the IOService and create channels to the other parties
-//     IOService ios;
-//     Endpoint p_owner(ios, "localhost", ownerport, EpMode::Client);
-//     Endpoint eprec1(ios, "localhost", recPort1, EpMode::Client);
-//     Endpoint eprec2(ios, "localhost", recPort2, EpMode::Client);
-//     Endpoint epsend1(ios, address1, sendport1, EpMode::Server);
-//     Endpoint epsend2(ios, address2, sendport2, EpMode::Server);
-//     Channel dataowner = p_owner.addChannel();
-//     Channel chl = eprec1.addChannel();
-//     Channel chl1 = eprec2.addChannel();
-//     Channel chl2 = epsend1.addChannel();
-//     Channel chl3 = epsend2.addChannel();
-//     try
-//     {
-//         // Receive input from data owner
-//         // std::vector<u8> share1;
-//         // std::vector<u8> share2;
-//         BitVector share1 = BitVector();
-//         BitVector share2 = BitVector();
-//         cout << "ready to receive:\n";
-//         dataowner.recv(share1);
-//         cout << "received:\n";
-//         dataowner.recv(share2);
-//         vector<BitVector> recshares{share1, share2};
-//         cout << "Party " << id << " received shares:\n";
-//         print_vector(recshares);
-//         // BitVector shared1 = BitVector(share1.data(), share1.size());
-//         // BitVector shared2 = BitVector(share2.data(), share2.size());
-//         // print_vector(shares);
-//     }
-//     catch (const exception &e)
-//     {
-//         cout << "except\n";
-//         cout << e.what() << endl;
-//     }
-
-//     // // Share the input with the other parties
-//     // uint8_t inputBuffer[1];
-//     // inputBuffer[0] = input;
-//     // chl2.asyncSend(inputBuffer, 1);
-//     // chl3.asyncSend(inputBuffer, 1);
-
-//     // // Receive the inputs from the other parties
-//     // uint8_t inputBuffers[2][1];
-//     // chl.recv(inputBuffers[0], 1);
-//     // chl1.recv(inputBuffers[1], 1);
-
-//     // // Compute the function on the inputs
-//     // bool output = computeFunction(input, inputBuffers[0][0], inputBuffers[1][0]);
-//     // std::cout << output << "ffff" << std::endl;
-//     // // Share the output with the other parties
-//     // uint8_t outputBuffer[1];
-//     // outputBuffer[0] = output;
-//     // chl2.send(outputBuffer, 1);
-//     // chl3.send(outputBuffer, 1);
-
-//     // Close the channels
-//     chl.close();
-//     chl1.close();
-//     chl2.close();
-//     chl3.close();
-// }
 vector<ZZ_p> convert(vector<int> input)
 {
     vector<ZZ_p> output;
@@ -185,7 +121,7 @@ void runMPC(int pid, const string ownerIP, int ownerPort, const string address1,
         sigma={7,2,5,8,4,9,6,11};
         sigmaZZ=convert(sigma);
     }
-    testmpc.genperm(testvec);   
+    testmpc.genperm();   
     // vector<ZZ_p> og{to_ZZ_p(4),to_ZZ_p(2),to_ZZ_p(1),to_ZZ_p(3)};
     // vector<ZZ_p> randpi=testmpc.Frand(4);
     // testmpc.shuffle(randpi, testvec);
@@ -217,36 +153,29 @@ int main()
     string address2 = "localhost"; // address of the remote ssh server for party 2
     string address3 = "localhost"; // address of the remote ssh server for party 3
 
-    // // Run each party as a separate thread
-    // std::thread t0(dataclient, 4, owner1, address1, owner2, address2, owner3, address3);
-    // std::thread t2(party, 0, owner1, port12, port13, false, address2, port21, address3, port31);
-    // std::thread t3(party, 1, owner2, port21, port23, false, address3, port12, address1, port32);
-    // std::thread t4(party, 2, owner3, port31, port32, true, address1, port13, address2, port23);
-    // string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/testdata.txt";
-    // vector<BitVector> bitInput;
-    // vector<double> input = CSVtoVector(filename);
-    // vector<uint64_t> secrets = ScaleVector(input, pow(10,3));
-    // bitdecompose(secrets, &bitInput);
-    // print_vector(secrets);
-    // print_vector(bitInput);
     auto start = std::chrono::high_resolution_clock::now();
     vector<std::future<void>> futures;
-    futures.push_back(async(launch::async, dataclient, owner1, address1, owner2, address2, owner3, address3));
-    futures.push_back(async(launch::async, runMPC, 0, "localhost", owner1, address2, port12, port21, address3, port13, port31));
-    futures.push_back(async(launch::async, runMPC, 1, "localhost", owner2, address3, port23, port32, address1, port21, port12));
-    futures.push_back(async(launch::async, runMPC, 2, "localhost", owner3, address1, port31, port13, address2, port32, port23));
-
-    for (auto &future : futures)
+    for (int row=0; row<2; row++)
     {
-        try
+        futures.push_back(async(launch::async, dataclient, owner1, address1, owner2, address2, owner3, address3, row));
+        futures.push_back(async(launch::async, runMPC, 0, "localhost", owner1, address2, port12, port21, address3, port13, port31));
+        futures.push_back(async(launch::async, runMPC, 1, "localhost", owner2, address3, port23, port32, address1, port21, port12));
+        futures.push_back(async(launch::async, runMPC, 2, "localhost", owner3, address1, port31, port13, address2, port32, port23));
+
+        for (auto &future : futures)
         {
-            future.get();
+            try
+            {
+                future.get();
+            }
+            catch (const std::exception &e)
+            {
+                cerr << "Exception caught: " << e.what() << std::endl;
+            }
         }
-        catch (const std::exception &e)
-        {
-            cerr << "Exception caught: " << e.what() << std::endl;
-        }
+        futures.clear();
     }
+    
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = end - start;
     double durationInSeconds = duration.count();
