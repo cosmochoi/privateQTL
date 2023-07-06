@@ -18,15 +18,15 @@ vector<uint32_t> convVec(vector<ZZ_p> v){
     return converted;
 }
 
-double cal_accuracy(const vector<double>& predicted, const string& filename, int N)
+double cal_accuracy(const vector<double>& predicted, const string& filename, int N, int numCol)
 {
-//    vector<double> actual = getRowFromMatrixFile(filename,N);
-    vector<double> actual = CSVtoVector(filename);
+   vector<double> actual = getRowFromMatrixFile(filename,N, numCol);
+    // vector<double> actual = CSVtoVector(filename);
     
    if (predicted.size() != actual.size()) {
         cout << "predicted size: " + to_string(predicted.size()) << endl;
         cout << "actual size: " + to_string(actual.size()) << endl;
-        throw runtime_error("Vector sizes do not match");
+        // throw runtime_error("Vector sizes do not match");
     }
 
     double sumSquaredDiff = 0.0;
@@ -36,21 +36,22 @@ double cal_accuracy(const vector<double>& predicted, const string& filename, int
     }
 
     double mse = sumSquaredDiff / predicted.size();
-    double rmse = std::sqrt(mse);
+    double rmse = sqrt(mse);
+    // cout << string("RMSE: " + to_string(rmse)) << endl;
     auto max = max_element(actual.begin(), actual.end());
     auto min = min_element(actual.begin(), actual.end());
     double normalized = *max - *min;
     return 1.0 - rmse/normalized;
 
 }
-bool mpc::initialize(int pid, string ownerIP, int ownerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2)
+bool mpc::initialize(int pid, string ownerIP, int ownerPort, int toOwnerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2)
 {
 
     // readyCounter = std::ref(counter);
     // ZZ_p::init(to_ZZ(4));
     this->pid = pid;
     globalprng.SetSeed(commonSeed);
-    if (!setupChannels(ownerIP, ownerPort, address1, recPort1, sendPort1, address2, recPort2, sendPort2))
+    if (!setupChannels(ownerIP, ownerPort, toOwnerPort, address1, recPort1, sendPort1, address2, recPort2, sendPort2))
     {
         cout << "Network channel failed.\n";
     }
@@ -60,21 +61,31 @@ bool mpc::initialize(int pid, string ownerIP, int ownerPort, string address1, in
     }
     return true;
 }
-bool mpc::setupChannels(string ownerIP, int ownerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2)
+bool mpc::setupChannels(string ownerIP, int ownerPort, int toOwnerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2)
 {
+    string to_print = "setup Channels: ownerPort: " + to_string(ownerPort);
+    to_print.append(" pid " + to_string(this->pid));
+    to_print.append(" recPort1 " + to_string(recPort1));
+    to_print.append(" recPort2 " + to_string(recPort2));
+    to_print.append("\n");
+    cout << to_print;
+
     // IOService ios;
     Endpoint p_owner(ios, ownerIP, ownerPort, EpMode::Client);
+    Endpoint ownersend(ios, ownerIP, toOwnerPort, EpMode::Server);
     Endpoint eprec1(ios, address1, recPort1, EpMode::Client);
     Endpoint eprec2(ios, address2, recPort2, EpMode::Client);
     Endpoint epsend1(ios, address1, sendPort1, EpMode::Server);
     Endpoint epsend2(ios, address2, sendPort2, EpMode::Server);
     this->dataowner = p_owner.addChannel();
+    this->toOwner = ownersend.addChannel();
     this->fromPlus = eprec1.addChannel();
     this->fromMinus = eprec2.addChannel();
     this->toPlus = epsend1.addChannel();
     this->toMinus = epsend2.addChannel();
     cout << "Established channels with the computing parties and data owner.\n";
     p_owner.stop();
+    ownersend.stop();
     eprec1.stop();
     eprec2.stop();
     epsend1.stop();
@@ -124,28 +135,14 @@ bool mpc::setupSeeds()
     return true;
 }
 
-void mpc::receiveOriginalData()
+void mpc::ready()
 {
-    // vector<double> result;
-    // try 
-    // {
-    //     for (int i = 0; i < this->n; i++) 
-    //     {
-    //         double received_data;
-    //         this->dataowner.recv(received_data);
-    //         result.push_back(received_data);
-    //     }
-    //     vector<double> temp(result.begin(), result.end());
-    //     swap(this->originalData, temp);
-    // }
-    // catch (const exception &e)
-    // {
-    //     cout << "except\n";
-    //     cout << e.what() << endl;
-    // }
-    // cout << "Secrets received.\n";
+    bool empty = areVectorsEmpty();
+    if (empty)
+        cout << string(to_string(this->pid) + " ready to receive.\n");
+    int ready = static_cast<int>(empty);
+    this->toOwner.send(ready);
 }
-
 void mpc::receiveSecrets()
 {
     vector<uint32_t> dest;
@@ -158,32 +155,43 @@ void mpc::receiveSecrets()
     vector<uint32_t> result;
     try 
     {
-        for (int i = 0; i < dest[0]*dest[1]*2; i++) 
-        {
-            uint32_t received_data;
-            this->dataowner.recv(received_data);
-            result.push_back(received_data);
-        }
+        // this->dataowner.recv(this->originalData);
+        this->dataowner.recv(result);
+        // for (int i = 0; i < dest[0]*dest[1]*2; i++) 
+        // {
+        //     uint32_t received_data;
+        //     this->dataowner.recv(received_data);
+        //     result.push_back(received_data);
+        // }
         vector<ZZ_p> temp(result.begin(), result.end());
         swap(this->shares, temp);
         //receiving identity shares
-        for (int i=0; i<dest[0]*2; i++)
-        {
-            uint32_t share;
-            this->dataowner.recv(share);
-            this->identity.push_back(conv<ZZ_p>(share));
+        vector<uint32_t> identity_result;
+        this->dataowner.recv(identity_result);
+        vector<ZZ_p> identity_temp(identity_result.begin(), identity_result.end());
+        swap(this->identity, identity_temp);
+        // for (int i=0; i<dest[0]*2; i++)
+        // {
+        //     uint32_t share;
+        //     this->dataowner.recv(share);
+        //     this->identity.push_back(conv<ZZ_p>(share));
 
-        }
+        // }
         //receiving zscore shares
         double shiftsize;
         this->dataowner.recv(shiftsize);
         this->shiftsize=shiftsize;
-        for (int i=0; i<dest[0]*2; i++)
-        {
-            uint32_t share;
-            this->dataowner.recv(share);
-            this->zscores.push_back(conv<ZZ_p>(share));
-        }
+
+        vector<uint32_t> zscore_result;
+        this->dataowner.recv(zscore_result);
+        vector<ZZ_p> zscore_temp(zscore_result.begin(), zscore_result.end());
+        swap(this->zscores, zscore_temp);
+        // for (int i=0; i<dest[0]*2; i++)
+        // {
+        //     uint32_t share;
+        //     this->dataowner.recv(share);
+        //     this->zscores.push_back(conv<ZZ_p>(share));
+        // }
     }
     catch (const exception &e)
     {
@@ -309,7 +317,6 @@ vector<ZZ_p> mpc::reveal(vector<ZZ_p>& pi, bool isperm)
             throw logic_error("received inputs do not match."); // <-- THIS IS SOMETIMES THROWN BUT NOT CAUGHT
         } 
         catch (const std::string& ex) {
-            // Handle the exception
             std::cerr << "Exception occurred: " << ex << std::endl;
         }
         close();
@@ -353,18 +360,12 @@ vector<ZZ_p> mpc::reveal(vector<ZZ_p>& pi, bool isperm)
             }
         }
     }
-
-    
-    // print_vector(reconstructed);
-    // print_vector(share1);
-    // print_vector(share2);
     return reconstructed;
     
 }
 
 void mpc::reshare(vector<ZZ_p>& shares, int reshareID)
 {
-    // cout << "reshare entered.\n";
     vector<ZZ_p> randoms(3);
     // mutex mutex;
     // condition_variable cv;
@@ -435,20 +436,6 @@ void mpc::reshare(vector<ZZ_p>& shares, int reshareID)
     // }
     // cout << "reshared." << endl;
 }
-
-
-// void mpc::reshare(vector<ZZ_p> &shares)
-// {
-//     vector<uint32_t> newshare(shares.size());
-//     for (int i=0; i<shares.size()/2; i++)
-//     {
-//         this->fromMinus.recv(newshare[2*i]);
-//         this->fromPlus.recv(newshare[2*i+1]);
-//     }
-//     vector<ZZ_p> temp(newshare.begin(), newshare.end());
-//     shares.swap(temp);
-//     // return newshare;
-// }
 
 //is adding alpha beta gamma necessary? 
 vector<ZZ_p> mpc::Fmult(vector<ZZ_p> k_i, vector<ZZ_p> s_i)
@@ -543,16 +530,6 @@ void mpc::apply_perm_local(bool participate, vector<ZZ_p> &v, vector<ZZ_p> &pi)
         vector<ZZ_p> v2(v.size());
         for (uint32_t i = 0; i < v.size()/2; i++)
         {
-            // uint32_t pi_i;// = conv<uint64_t>(pi[i]);
-            // conv(pi_i, pi[i]);
-            // if (pi_i - 1 < 0) {
-            //     cout << "pi_i too low!" << pi_i << endl;
-            // } else if ((pi_i - 1) * 2 + 1 >= v.size()) {
-            //     cout << i << endl;
-            //     cout << pi[i] <<endl;
-            //     cout << "pi_i too high!" << pi_i << "size: " << v.size() << endl; // I HIT THIS: pi_i too high!24762size: 34764, SEG FAULT
-            // }
-
             if (2 * i + 1 >= v.size()) 
             {
                 cout << "i too high" << i << "size: " << v.size() << endl;
@@ -646,8 +623,6 @@ void mpc::shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a)
         pi_m[i] = pi[2*i];
         pi_p[i] = pi[2*i+1];
     }
-    
-    // vector<ZZ_p> revealed(a.size()/2);
     if (this->pid == 0)
     {   
         apply_perm_local(true, a, pi_m);
@@ -690,53 +665,6 @@ void mpc::shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a)
     //     cv.get().wait(lock, [this, div]{ return readyCounter.get().load() == 0  > div; });
     // }
 }
-
-
-// void mpc::shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a)
-// {
-//     for (ZZ_p z : pi) {
-//         uint32_t value = conv<uint32_t>(z);
-//         if (value > pi.size()) {
-//             cout << "Shuffle." << endl;
-//             cout << "value: " << value << endl;
-//             cout << "size of vector: " << pi.size() << endl;
-//             throw logic_error("Shuffle: permutation is bigger than vector size.");
-//         }
-//     }
-//     if (pi.size() != a.size())
-//         throw std::invalid_argument("Your shares and pi size are different");
-//     vector<ZZ_p> pi_m(pi.size()/2), pi_p(pi.size()/2);
-//     for (int i=0; i<pi.size()/2; i++)
-//     {
-//         pi_m[i] = pi[2*i];
-//         pi_p[i] = pi[2*i+1];
-//     }
-//     // vector<ZZ_p> revealed(a.size()/2);
-//     if (this->pid == 0)
-//     {   
-//         apply_perm_local(a, pi_m, 2);
-//         reshare(a, 1);
-//         apply_perm_local(a, pi_p, 1);
-//         reshare(a, 2);
-//         reshare(a);
-//     }
-//     else if (this->pid == 1)
-//     {
-//         reshare(a);
-//         apply_perm_local(a, pi_m,0);
-//         reshare(a, 2);
-//         apply_perm_local(a, pi_p,2);
-//         reshare(a, 0);
-//     }
-//     else
-//     {
-//         apply_perm_local(a, pi_p,0);
-//         reshare(a, 1);
-//         reshare(a);
-//         apply_perm_local(a, pi_m,1);
-//         reshare(a, 0);
-//     }
-// }
 
 void mpc::unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b)
 {
@@ -781,8 +709,11 @@ void mpc::unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b)
 
 void mpc::apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k)
 {
-    if (rho.size() != k.size())
+    if (rho.size() != k.size()){
+        cout << string("rho: "+ to_string(rho.size()) + ", k: "+ to_string(k.size()));
         throw std::invalid_argument("rho and k size don't match");
+    }
+        
     vector<ZZ_p> pi=Frand(k.size()/2);
     
     shuffle(pi, rho);
@@ -795,12 +726,9 @@ void mpc::apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k)
         for (size_t i = 0; i < k.size()/2; i++)
         {
             uint64_t pi_i = conv<uint64_t>(reconstructed[i]);
-            // uint64_t pi2 = conv<uint64_t>(pi[2*i+1]);
             v2[(pi_i-1)*2] =k[2*i];
             v2[(pi_i-1)*2+1]=k[2*i+1];
         }
-        // vector<ZZ_p> testing;
-        // testing = inversePerm(pi);
         k = std::move(v2);
 
     }
@@ -820,17 +748,14 @@ void mpc::compose(vector<ZZ_p> &sigma, vector<ZZ_p> &rho)
     shuffle(pi,sigma);
     vector<ZZ_p> reconstructed = reveal(sigma, false);
     assertSize(reconstructed, "compose");
-    // print_vector(reconstructed);
     vector<ZZ_p> sigma_inv = inversePerm(reconstructed);
-    // apply_perm_local(rho, sigma_inv);
-    // vector<ZZ_p> appliedvec(sigma_inv.size());
+
     if (sigma_inv.size() == rho.size()/2)
     {
         vector<ZZ_p> v2(rho.size());
         for (size_t i = 0; i < rho.size()/2; i++)
         {
             uint64_t pi_i = conv<uint64_t>(sigma_inv[i]);
-            // uint64_t pi2 = conv<uint64_t>(pi[2*i+1]);
             v2[(pi_i-1)*2] =rho[2*i];
             v2[(pi_i-1)*2+1]=rho[2*i+1];
         }
@@ -863,21 +788,7 @@ void writeVectorToCSV(const std::vector<T>& data, int pid, int row, string name)
     }
 }
 
-// vector<ZZ_p> mpc::get_shared_inverse(vector<ZZ_p> sigma)
-// {
-//     // vector<ZZ_p> identity_shares(sigma.size());
-//     // for (int i=0; i>sigma.size(); i++)
-//     // {
-//     //     uint32_t share;
-//     //     this->dataowner.recv(share);
-//     //     identity_shares[i] = conv<ZZ_p>(share);
-//     // }
-//     // print_vector(identity_shares);
-//     apply_shared_perm(sigma, this->identity);
-//     // return identity_shares;
-// }
-
-void mpc::genperm(int row)
+vector<double> mpc::genperm(int row, int numCol)
 {
     vector<ZZ_p> k_i(2*this->n);
     k_i.assign(this->shares.begin(), this->shares.begin() + 2*this->n);
@@ -903,54 +814,54 @@ void mpc::genperm(int row)
         }
         cout << "loop finished.\n";
         vector<ZZ_p> reconstructed = reveal(sigma, false); 
-        // cout <<this->pid <<endl;
-        if (this->pid == 0)
-            print_vector(this->zscores);
         apply_shared_perm(sigma, this->identity);
         apply_shared_perm(this->identity, this->zscores);
-        if (this->pid == 0)
-            print_vector(this->zscores);
-        vector<ZZ_p> zscores_result = reveal(this->zscores, false);
+        vector<ZZ_p> zscores_result = reveal(this->zscores, false); // check if this changes after running multiple times TODO
+
         // writeVectorToCSV(zscores_result, this->pid, 0, "unfiltered");
         vector<uint32_t> zscores_uint = convVec(zscores_result);
-        vector<double> zscores_unscaled = UnscaleVector_signed(zscores_uint, pow(10,3));
+        vector<double> zscores_unscaled = UnscaleVector_signed(zscores_uint, pow(10,2));
         // writeVectorToCSV(zscores_unscaled, this->pid, row, "Unscaled");
-        vector<double> zscores_int = UnshiftVector(zscores_unscaled,this->shiftsize);
+        vector<double> zscores_double = UnshiftVector(zscores_unscaled,this->shiftsize);
+        // print_vector(zscores_int);
         // writeVectorToCSV(zscores_int, this->pid, row, "unscaled_unshifted");
         // vector<double> zscores = UnscaleVector_signed(zscores_int, pow(10,5));
         // writeVectorToCSV(zscores, this->pid, row, "unshift_descaled");
-        // string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/accuracy_combination/correctQN.tsv";
+        string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/accuracy_combination/correctQN.tsv";
         // string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/toyQN.tsv";
-        // double accuracy = cal_accuracy(zscores_int, zscore_filename, row);
-        // cout << string("row: " + to_string(row) + "/ pid" + to_string(this->pid) + ": " + to_string(accuracy)) << endl;
-        // print_vector(this->identity);
-        // vector<ZZ_p> inv_reveal = reveal(this->identity, false);
-        // print_vector(reconstructed);
-        // print_vector(inv_reveal);
-        // writeVectorToCSV(reconstructed, this->pid, row);
-
+        double accuracy = cal_accuracy(zscores_double, zscore_filename, row, numCol);
+        if (this->pid == 0)
+        {
+            cout << string("row: " + to_string(row) + "/ pid" + to_string(this->pid) + ": " + to_string(accuracy)) << endl;
+            // writeVectorToCSV(zscores_double, this->pid, row, "0628");
+        }
+            
+        return zscores_double;
         // if (pid == 0) {
         //     print_vector(reconstructed);
-        //     print_vector(this->originalData);
-            // vector<int> trimData;
-            // for (int i = 0; i < this->originalData.size(); i++) {
-            //     trimData.push_back(floor(this->originalData[i] * 10000));
-            // }
-            // vector<int> sortedData(trimData);
-            // sort(sortedData.begin(), sortedData.end());
-            // vector<int> result;
-            // for (int i = 0; i < trimData.size(); i++) {
-            //     int j = 0;
-            //     for (; j < sortedData.size() && (sortedData[j] != trimData[i] || find(result.begin(), result.end(), j + 1) != result.end()); j++);
-            //     result.push_back(j + 1);
-            // }
-            // // print_vector(result);
-            // vector<ZZ_p> resultZZ;
-            // for (int i = 0; i < result.size(); i++) {
-            //     resultZZ.push_back(conv<ZZ_p>(result[i]));
-            // }
-            // assert_equal(resultZZ, reconstructed, "genperm result");
-        //}
+        //     // print_vector(this->originalData);
+        //     vector<int> trimData;
+        //     for (int i = 0; i < this->originalData.size(); i++) {
+        //         trimData.push_back(floor(this->originalData[i] * 100000));
+        //     }
+        //     vector<int> sortedData(trimData);
+        //     sort(sortedData.begin(), sortedData.end());
+        //     vector<int> result;
+        //     for (int i = 0; i < trimData.size(); i++) {
+        //         int j = 0;
+        //         for (; j < sortedData.size() && (sortedData[j] != trimData[i] || find(result.begin(), result.end(), j + 1) != result.end()); j++);
+        //         result.push_back(j + 1);
+        //     }
+        //     print_vector(result);
+        //     vector<ZZ_p> resultZZ;
+        //     for (int i = 0; i < result.size(); i++) {
+        //         resultZZ.push_back(conv<ZZ_p>(result[i]));
+        //     }
+        //     assert_equal(resultZZ, reconstructed, "genperm result");
+        // }
+    }
+    catch(const std::logic_error &e){
+        cerr << "Exception caught: " << e.what() << std::endl;
     }
     catch (const std::exception &e)
     {
@@ -961,20 +872,14 @@ void mpc::genperm(int row)
 
 void mpc::close()
 {
-
+    // clearVectors();
     cout << "Closing channels.\n";
     // std::lock_guard<std::mutex> lock(mtx);
-
     this->dataowner.close();
-
     this->fromPlus.close();
-
     this->fromMinus.close();
-
     this->toPlus.close();
-
     this->toMinus.close();
-
     // this->ios.stop();
     cout << "channels closed.\n";
 }

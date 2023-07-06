@@ -16,7 +16,7 @@ void bitdecompose(vector<uint32_t> &secrets, vector<BitVector> *bitInput)
     }
 }
 
-void dataclient(int sendport1, int recvport1, string address1, int sendport2, int recvport2, string address2, int sendport3, int recvport3, string address3,int rowstart, int rowend)
+void dataclient(int sendport1, int recvport1, string address1, int sendport2, int recvport2, string address2, int sendport3, int recvport3, string address3,int rowstart, int rowend,int numCol, string zscorefile)
 {
     IOService ios;
     Endpoint epsend1(ios, address1, sendport1, EpMode::Server);
@@ -43,24 +43,24 @@ void dataclient(int sendport1, int recvport1, string address1, int sendport2, in
         if ((ready1 == 1) && (ready2 ==1) && (ready3==1))
         {
             vector<BitVector> bitInput;
-            string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/samplewise_QN.tsv";
-            // string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/accuracy_combination/correct_sampleQN.tsv";
+            // string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/samplewise_QN.tsv";
+            string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/accuracy_combination/correct_sampleQN.tsv";
             // string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/accuracy_combination/sample_thres125_fp1.tsv";
-            vector<double> input = getRowFromMatrixFile(filename,r);
+            vector<double> input = getRowFromMatrixFile(filename,r, numCol);
 
             // string filename ="/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/testdata2.txt";
             // vector<double> input = CSVtoVector(filename);
             // bitvector representation of input
             
-            vector<uint32_t> secrets = ScaleVector(input, pow(10,5)); // integer version of secret
+            vector<uint32_t> secrets = ScaleVector(input, pow(10,2)); // integer version of secret
             bitdecompose(secrets, &bitInput);
 
             NTL::SetSeed((NTL::conv<NTL::ZZ>((long)27))); // Seed change
             cout << "size of input: " << bitInput.size() << endl;
             cout << "size of each vector: " << bitInput[0].size() << endl;
 
-            // uint32_t p = nearestPowerOf2(bitInput.size());
-            uint32_t p=32768;
+            uint32_t p = nearestPowerOf2(bitInput.size());
+            // uint32_t p=32768;
             cout << "P: " << p << endl;
             ZZ_p::init(to_ZZ(p)); 
             uint32_t inv = PowerMod(3, -1, p);
@@ -99,8 +99,8 @@ void dataclient(int sendport1, int recvport1, string address1, int sendport2, in
             owner_p1.send(shares[0]);
             owner_p2.send(shares[1]);
             owner_p3.send(shares[2]);
-            // string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/zscores.txt";
-            string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/zscores.txt";
+            string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/"+zscorefile+".txt");
+            // string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/" + zscorefile + ".txt");
             vector<double> zscore_input = CSVtoVector(zscore_filename);
             // print_vector(zscore_input);
             // vector<int32_t> zscores_int = ScaleVector_signed(zscore_input, pow(10,5));
@@ -185,118 +185,33 @@ vector<ZZ_p> convert(vector<int> input)
     }
     return output;
 }
-void runMPC(int pid, const string ownerIP, int ownerPort, int toOwnerPort, const string address1, int recPort1, int sendPort1, 
-const string address2, int recPort2, int sendPort2,int rowstart, int rowend)//, atomic<int>& readyCounter, mutex& mtx, condition_variable& cv)
+void runMPC(int pid,  string ownerIP, int ownerPort, int toOwnerPort,  string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2,int rowstart, int rowend, int numCol, vector<vector<double>>& resultVector) //, atomic<int>& readyCounter, mutex& mtx, condition_variable& cv)
 {
+    string to_print = "runMPC: ownerPort: " + to_string(ownerPort);
+    to_print.append(" pid " + to_string(pid));
+    to_print.append(" recPort1 " + to_string(recPort1));
+    to_print.append(" recPort2 " + to_string(recPort2));
+    to_print.append("\n");
+    cout << to_print;
     // mpc testmpc(readyCounter, mtx, cv);
     mpc testmpc;
     // std::promise<void> promise;
     // std::future<void> future = promise.get_future();
-    // ZZ_p::init(to_ZZ(16));
-    
-    // cout << conv<int>(testvec[0]) <<endl;
+    vector<vector<double>> resultVectors;
     testmpc.initialize(pid, ownerIP, ownerPort, toOwnerPort, address1, recPort1, sendPort1, address2, recPort2, sendPort2);
     
     for (int row=rowstart; row<rowend; row++)
     {
+        cout << string("pid"+to_string(pid)+"_row"+to_string(row)+"\n");
+        vector<double> row_result;
         testmpc.ready();
         testmpc.receiveSecrets();
-        testmpc.genperm(row);
+        row_result=testmpc.genperm(row, numCol);
+        resultVectors.emplace_back(row_result);
         testmpc.clearVectors();
     }
-    
-    // vector<int> input, rho, sigma;
-    // vector<ZZ_p> testvec, rhoZZ, sigmaZZ;
-    // if (pid == 0) {
-    //     // input={6,4,8,8,3,2,9,2,7,9,5,3,4,6,3,10,1,13,12,2,7,8,5,2};
-    //     // testvec = convert(input);
-    //     rho={3,13,6,4,8,7,5,3};
-    //     rhoZZ=convert(rho);
-    //     // sigma={2,8,8,6,9,5,11,3};
-    //     // sigmaZZ=convert(sigma);
-    // }
-    // else if (pid ==1) {
-    //     // input={4,6,8,0,2,12,2,6,9,0,3,9,6,6,10,4,13,3,2,3,8,2,2,9};
-    //     // testvec = convert(input);
-    //     rho={13,2,4,9,7,5,3,9};
-    //     rhoZZ=convert(rho);
-    //     // sigma={8,7,6,5,5,4,3,6};
-    //     // sigmaZZ=convert(sigma);
-    // } 
-    // else {
-    //     // input={6,6,0,8,12,3,6,9,0,7,9,5,6,4,4,3,3,1,3,12,2,7,9,5};
-    //     // testvec = convert(input);
-    //     rho={2,3,9,6,5,8,9,5};
-    //     rhoZZ=convert(rho);
-    //     // sigma={7,2,5,8,4,9,6,11};
-    //     // sigmaZZ=convert(sigma);
-    // }
-    // vector<ZZ_p> rho2(rhoZZ);
-    // testmpc.compose(rhoZZ, rho2);
-    // print_vector(testmpc.reveal(rho2, false));
-
-
-       
-
-    // vector<ZZ_p> og{to_ZZ_p(4),to_ZZ_p(2),to_ZZ_p(1),to_ZZ_p(3)};
-    //         for (int i = 0; i < 100; i++) {
-
-    // vector<ZZ_p> randpi=testmpc.Frand(4);
-    // vector<ZZ_p> randrho=testmpc.Frand(4);
-
-    // vector<ZZ_p> reconstructedPi = testmpc.reveal(randpi, true);
-    // cout << "pi: " << endl;
-    // print_vector(randpi);
-    // vector<ZZ_p> reconstructedRho = testmpc.reveal(rhoZZ, false);
-    // cout <<"original: "<<endl;
-    // print_vector(reconstructedRho);
-    // vector<ZZ_p> reconstructedRho = testmpc.reveal(testvec, false);
-    // cout << "original: "<<endl;
-    // print_vector(reconstructedRho);
-    // for(int i = 0; i < 0; i++) {
-    //     cout << "REVEAL" + i << endl;
-    //     assert_equal(reconstructed, testmpc.reveal(randpi), "reveal" + i);
-    // }
-
-    // for(int j = 0; j < 1000; j++) {
-    //     testmpc.reshare(randpi, 1);
-    //     assert_equal(reconstructed, testmpc.reveal(randpi), "reshare" + j);
-    // }
-
-    // testmpc.shuffle(randpi, rhoZZ);
-    // testmpc.shuffle(randpi, testvec);
-    // cout << "after shuffle: " << endl;
-    // print_vector(testmpc.reveal(testvec, false));
-
-    // vector<ZZ_p> afterRho = testmpc.reveal(randrho, false);
-    // cout <<"After shuffle: " << endl;
-    // print_vector(afterRho);
-    // testmpc.unshuffle(randpi, testvec);
-    // testmpc.unshuffle(randpi, rhoZZ);
-
-    // cout <<"After unshuffle: " << endl;
-    // vector<ZZ_p> unshuffledRho = testmpc.reveal(rhoZZ, false);
-    // vector<ZZ_p> unshuffledRho = testmpc.reveal(testvec, false);
-    // print_vector(unshuffledRho);
-    // assert_equal(reconstructedRho, unshuffledRho, "unshuffle");
-    //         }
-    // } catch (const std::exception &e)
-    //         {
-    //             cerr << "Exception caught: " << e.what() << std::endl;
-    //         }
-
-    // print_vector(testmpc.reveal(randrho));
-    // vector<ZZ_p> testresult = testmpc.genbitperm(testvec);
-    // vector<ZZ_p> reconstructed = testmpc.reveal(testresult);
-    // testmpc.apply_shared_perm(testresult, testvec);
-    // vector<ZZ_p> sigma
-    // testmpc.compose(sigmaZZ,rhoZZ);
-    // vector<ZZ_p> test = testmpc.reveal(rhoZZ);
-    // testmpc.apply_perm_local(og, rho);
-    // print_vector(test);
-    // promise.set_value(); // signal that initialization is done
-    // future.get();        // wait for all threads to finish
     testmpc.close();
+    swap(resultVector, resultVectors);
 }
 void setThreadAffinity(std::thread& thread, int coreId)
 {
@@ -327,30 +242,80 @@ bool isPortOpen(int port) {
     close(sockfd);
     return true;
 }
-void startMPCset(vector<int>& availPorts, int startidx, vector<string>& address, int startrow, int endrow, vector<thread>& threads)
+void startMPCset(vector<int>& availPorts, int startidx, vector<string>& address, int startrow, int endrow, int numCol, string zscorefile, int CPU_core, vector<vector<double>>& finalVec)
 {
-    thread dataClientThread(dataclient, availPorts[startidx + 6], availPorts[startidx + 9], address[1], availPorts[startidx + 7], availPorts[startidx + 10], address[2], availPorts[startidx + 8], availPorts[startidx + 11], address[3], startrow, endrow);
-    setThreadAffinity(dataClientThread,0);
+    cout << "startMpcset Start\n";
+    vector<thread> threads;
+    vector<vector<double>> resultVectors1,resultVectors2,resultVectors3;
+    thread dataClientThread(dataclient, availPorts[startidx + 6], availPorts[startidx + 9], address[1], availPorts[startidx + 7], availPorts[startidx + 10], address[2], 
+    availPorts[startidx + 8], availPorts[startidx + 11], address[3], startrow, endrow, numCol, zscorefile);
+    setThreadAffinity(dataClientThread,CPU_core+0);
     threads.emplace_back(move(dataClientThread));
-    thread runMPC1(runMPC, 0, address[0], availPorts[startidx + 6], availPorts[startidx + 9], address[2], availPorts[startidx + 0], availPorts[startidx + 2], address[3], availPorts[startidx + 1], availPorts[startidx + 4], startrow, endrow);
-    setThreadAffinity(runMPC1,1);
+
+    string to_print = "1 setup Channels: ownerPort: " + to_string(availPorts[startidx + 6]);
+    to_print.append(" recPort1 " + to_string(availPorts[startidx + 0]));
+    to_print.append(" recPort2 " + to_string(availPorts[startidx + 1]));
+    to_print.append("\n");
+    cout << to_print;
+
+    // int startidx1 = startidx;
+    thread runMPC1([=, &resultVectors1]() {
+        runMPC(0, address[0], availPorts[startidx + 6], availPorts[startidx + 9], address[2], availPorts[startidx + 0], availPorts[startidx + 2], address[3], availPorts[startidx + 1], availPorts[startidx + 4], 
+        startrow, endrow, numCol, resultVectors1);
+    });
+    // thread runMPC1(runMPC, 0, address[0], availPorts[startidx + 6], availPorts[startidx + 9], address[2], availPorts[startidx + 0], availPorts[startidx + 2], address[3], availPorts[startidx + 1], availPorts[startidx + 4], startrow, endrow, resultVectors1);
+    setThreadAffinity(runMPC1,CPU_core+1);
     threads.emplace_back(move(runMPC1));
-    thread runMPC2(runMPC, 1, address[0], availPorts[startidx + 7], availPorts[startidx + 10], address[3], availPorts[startidx + 3], availPorts[startidx + 5], address[1], availPorts[startidx + 2], availPorts[startidx + 0], startrow, endrow);
-    setThreadAffinity(runMPC2,2);
+
+    to_print = "2 setup Channels: ownerPort: " + to_string(availPorts[startidx + 7]);
+    to_print.append(" recPort1 " + to_string(availPorts[startidx + 3]));
+    to_print.append(" recPort2 " + to_string(availPorts[startidx + 2]));
+    to_print.append("\n");
+    cout << to_print;
+
+    // // int startidx2 = startidx;
+    thread runMPC2([=, &resultVectors2]() {
+        runMPC(1, address[0], availPorts[startidx + 7], availPorts[startidx + 10], address[3], availPorts[startidx + 3], availPorts[startidx + 5], address[1], availPorts[startidx + 2], availPorts[startidx + 0], 
+        startrow, endrow,numCol,resultVectors2);
+    });
+    // thread runMPC2(runMPC, 1, address[0], availPorts[startidx + 7], availPorts[startidx + 10], address[3], availPorts[startidx + 3], availPorts[startidx + 5], address[1], availPorts[startidx + 2], availPorts[startidx + 0], startrow, endrow, resultVectors2);
+    setThreadAffinity(runMPC2,CPU_core+2);
     threads.emplace_back(move(runMPC2));
-    thread runMPC3(runMPC, 2, address[0], availPorts[startidx + 8], availPorts[startidx + 11], address[1], availPorts[startidx + 4], availPorts[startidx + 1], address[2], availPorts[startidx + 5], availPorts[startidx + 3], startrow, endrow);
-    setThreadAffinity(runMPC3,2);
+
+    to_print = "3 setup Channels: ownerPort: " + to_string(availPorts[startidx + 8]);
+    to_print.append(" recPort1 " + to_string(availPorts[startidx + 4]));
+    to_print.append(" recPort2 " + to_string(availPorts[startidx + 5]));
+    to_print.append("\n");
+    cout << to_print;
+
+    thread runMPC3([=, &resultVectors3]() {
+        runMPC(2, address[0], availPorts[startidx + 8], availPorts[startidx + 11], address[1], availPorts[startidx + 4], availPorts[startidx + 1], address[2], availPorts[startidx + 5], availPorts[startidx + 3], 
+        startrow, endrow, numCol,resultVectors3);
+    });
+    // thread runMPC3(runMPC, 2, address[0], availPorts[startidx + 8], availPorts[startidx + 11], address[1], availPorts[startidx + 4], availPorts[startidx + 1], address[2], availPorts[startidx + 5], availPorts[startidx + 3], startrow, endrow, resultVectors3);
+    setThreadAffinity(runMPC3,CPU_core+2);
     threads.emplace_back(move(runMPC3));
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    swap(finalVec, resultVectors1);
 }
-int main()
+int main(int argc, char* argv[])
 {
-    int lo_row = 0;
-    int mid_row = 1;
-    int hi_row = 3;
+    if (argc < 5)
+    {
+        cout << "Please provide at least four arg: low, mid, high, samplecount, zscorefile.\n";
+        return 1;
+    }
+    int lo_row = stoi(argv[1]);
+    int mid_row = stoi(argv[2]);
+    int hi_row = stoi(argv[3]);
+    int samplecount = stoi(argv[4]);
+    string zscorefile = argv[5];
     int startingPort = 12300;
     int assignedPorts=0;
     vector<int> openPorts;
-    while (assignedPorts < 48)
+    while (assignedPorts < 24)
     {
         int port = startingPort;
         if(isPortOpen(port))
@@ -360,31 +325,35 @@ int main()
         }
         startingPort++;
     }
-    // print_vector(openPorts);
-    // int port12 = openPorts[0];//12345;            // p2 to p1
-    // int port13 = openPorts[1]; //12346;            // p3 to p1
-    // int port21 = openPorts[2];//12355;            // p1 to p2
-    // int port23 = openPorts[3];//12356;            // p3 to p2
-    // int port31 = openPorts[4];//12365;            // p1 to p3
-    // int port32 = openPorts[5];//12366;            // p2 to p3
-    // int owner1 = openPorts[6];//12375;            // owner to p1
-    // int owner2 = openPorts[7];//12376;            // owner to p2
-    // int owner3 = openPorts[8];//12377;            // owner to p3
-    // int toOwner1 = openPorts[9];//12378;           // p1 to owner
-    // int toOwner2 = openPorts[10];//12379;           //p2 to owner
-    // int toOwner3 = openPorts[11];//12380;           //p3 to owner
+    print_vector(openPorts);
     vector<string> address{"localhost","localhost","localhost","localhost"};
 
-    auto start = std::chrono::high_resolution_clock::now();
-    int numCores = std::thread::hardware_concurrency();
+    auto start = chrono::high_resolution_clock::now();
+    int numCores = thread::hardware_concurrency();
     // mutex mtx;
     // condition_variable cv;
     // std::atomic<int> readyCounter(0);
-    std::vector<std::thread> threads;
-    startMPCset(openPorts, 0, address, 0, 1,threads);
-    startMPCset(openPorts, 12, address, 1, 2,threads);
-    startMPCset(openPorts, 24, address, 2, 3,threads);
-    startMPCset(openPorts, 36, address, 3, 4,threads);
+    vector<thread> threads;
+    vector<vector<double>> resultVec1,resultVec2;
+    thread thread1([&]() {
+        startMPCset(openPorts, 0, address, lo_row, mid_row, samplecount, zscorefile, 0, resultVec1);
+    });
+    thread thread2([&]() {
+        startMPCset(openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2);
+    });
+    threads.emplace_back(move(thread1));
+    threads.emplace_back(move(thread2));
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    cout << resultVec1.size() << endl;
+    // cout << resultVec2[0].size() << endl;
+    resultVec1.insert(resultVec1.end(), resultVec2.begin(), resultVec2.end());
+    cout << resultVec1.size() << endl;
+    // startMPCset(openPorts, 0, address, lo_row, mid_row, samplecount, zscorefile, 0, resultVec1);
+    // startMPCset(openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2);
+    // startMPCset(openPorts, 24, address, 2, 3,threads, 4);
+    // startMPCset(openPorts, 36, address, 3, 4,threads, 4);
         // threads.emplace_back(dataclient, owner1, toOwner1, address1, owner2, toOwner2, address2, owner3, toOwner3,address3);
         // threads.emplace_back(runMPC, 0, "localhost", owner1, toOwner1, address2, port12, port21, address3, port13, port31);
         // threads.emplace_back(runMPC, 1, "localhost", owner2, toOwner2, address3, port23, port32, address1, port21, port12);
@@ -403,22 +372,6 @@ int main()
     // setThreadAffinity(runMPC3,2);
     // threads.emplace_back(move(runMPC3));
 
-
-    // int port12_2 = 12381;            // p2 to p1
-    // int port13_2 = 12382;            // p3 to p1
-    // int port21_2 = 12383;            // p1 to p2
-    // int port23_2 = 12384;            // p3 to p2
-    // int port31_2 = 12385;            // p1 to p3
-    // int port32_2 = 12386;            // p2 to p3
-    // int owner1_2 = 12387;            // owner to p1
-    // int owner2_2 = 12388;            // owner to p2
-    // int owner3_2 = 12389;            // owner to p3
-    // int toOwner1_2 = 12390;           // p1 to owner
-    // int toOwner2_2 = 12391;           //p2 to owner
-    // int toOwner3_2 = 12392;           //p3 to owner
-    // // // string address1 = "localhost"; // address of the remote ssh server for party 1
-    // // // string address2 = "localhost"; // address of the remote ssh server for party 2
-    // // // string address3 = "localhost"; // address of the remote ssh server for party 3
     // thread dataClientThread2(dataclient, owner1_2, toOwner1_2, address1, owner2_2, toOwner2_2, address2, owner3_2, toOwner3_2, address3, 2, hi_row);
     // setThreadAffinity(dataClientThread2,0);
     // threads.emplace_back(move(dataClientThread2));
@@ -431,10 +384,7 @@ int main()
     // thread runMPC3_2(runMPC, 2, data_address, owner3_2, toOwner3_2, address1, port31_2, port13_2, address2, port32_2, port23_2,2, hi_row);
     // setThreadAffinity(runMPC3_2,2);
     // threads.emplace_back(move(runMPC3_2));    
-    for (auto& thread : threads)
-    {
-        thread.join();
-    }
+
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = end - start;
     double durationInSeconds = duration.count();
