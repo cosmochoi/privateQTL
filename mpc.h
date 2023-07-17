@@ -49,32 +49,38 @@ public:
     bool setupChannels(string ownerIP, int ownerPort, int toOwnerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2);
     bool setupSeeds(); // shared seeds for PRNG
     bool areVectorsEmpty() const {
-        return shares.empty() && identity.empty() && zscores.empty();
+        return shares.empty();// && identity.empty() && zscores.empty();
     }
     void ready();
     void receiveSecrets();
+    
     void assertSize(vector<ZZ_p> pi, string tag);
     void assertValid(vector<ZZ_p> sigma, string tag);
     vector<uint32_t> apply_plaintext_perm(vector<uint32_t> rho, vector<uint32_t> sigma);
     vector<ZZ_p> Frand(uint32_t bufferSize);
     vector<ZZ_p> reveal(vector<ZZ_p> &pi, bool isperm);
     void reshare(vector<ZZ_p> &shares, int reshareID);
-    // void reshare(vector<ZZ_p> &shares);
+    void reshareM(vector<vector<ZZ_p>>& shares, int reshareID);
     vector<ZZ_p> Fmult(vector<ZZ_p> k_i, vector<ZZ_p> s_i);
     vector<ZZ_p> genbitperm(vector<ZZ_p> &keybit);
     vector<ZZ_p> inversePerm(vector<ZZ_p> pi);
     void apply_perm_local(bool participate,vector<ZZ_p> &v, vector<ZZ_p> &pi);
+    void apply_perm_localM(bool participate, vector<vector<ZZ_p>> &v, vector<ZZ_p> &pi);
     void shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a);
     void unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b);
+    void testMatrix(vector<ZZ_p>& pi);
+    void shuffleM(vector<ZZ_p> &pi, vector<vector<ZZ_p>> &a);
     void apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k);
     void compose(vector<ZZ_p> &sigma, vector<ZZ_p> &rho);
     // vector<ZZ_p> get_shared_inverse(vector<ZZ_p> sigma);
     vector<double> genperm(int row, int numCol);
     void clearVectors() {
         shares.clear();
-        identity.clear();
-        zscores.clear();
+        // identity.clear();
+        // zscores.clear();
     }
+    void receiveMatrix();
+    vector<ZZ_p> matmult(vector<ZZ_p> mat1, vector<ZZ_p>mat2, int row1, int col1, int row2, int col2);
     void close();
 
 private:
@@ -83,6 +89,9 @@ private:
     vector<ZZ_p> shares;
     vector<ZZ_p> identity;
     vector<ZZ_p> zscores;
+    vector<vector<ZZ_p>> geno;
+    vector<vector<ZZ_p>> pheno;
+    vector<uint32_t> shape;
     // atomic<int>& readyCounter;
     // atomic<bool> allPartiesReady;
     Channel dataowner;

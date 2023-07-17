@@ -46,9 +46,6 @@ double cal_accuracy(const vector<double>& predicted, const string& filename, int
 }
 bool mpc::initialize(int pid, string ownerIP, int ownerPort, int toOwnerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2)
 {
-
-    // readyCounter = std::ref(counter);
-    // ZZ_p::init(to_ZZ(4));
     this->pid = pid;
     globalprng.SetSeed(commonSeed);
     if (!setupChannels(ownerIP, ownerPort, toOwnerPort, address1, recPort1, sendPort1, address2, recPort2, sendPort2))
@@ -63,14 +60,6 @@ bool mpc::initialize(int pid, string ownerIP, int ownerPort, int toOwnerPort, st
 }
 bool mpc::setupChannels(string ownerIP, int ownerPort, int toOwnerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2)
 {
-    string to_print = "setup Channels: ownerPort: " + to_string(ownerPort);
-    to_print.append(" pid " + to_string(this->pid));
-    to_print.append(" recPort1 " + to_string(recPort1));
-    to_print.append(" recPort2 " + to_string(recPort2));
-    to_print.append("\n");
-    cout << to_print;
-
-    // IOService ios;
     Endpoint p_owner(ios, ownerIP, ownerPort, EpMode::Client);
     Endpoint ownersend(ios, ownerIP, toOwnerPort, EpMode::Server);
     Endpoint eprec1(ios, address1, recPort1, EpMode::Client);
@@ -155,43 +144,34 @@ void mpc::receiveSecrets()
     vector<uint32_t> result;
     try 
     {
-        // this->dataowner.recv(this->originalData);
+        // receiving shares;
         this->dataowner.recv(result);
-        // for (int i = 0; i < dest[0]*dest[1]*2; i++) 
-        // {
-        //     uint32_t received_data;
-        //     this->dataowner.recv(received_data);
-        //     result.push_back(received_data);
-        // }
         vector<ZZ_p> temp(result.begin(), result.end());
         swap(this->shares, temp);
-        //receiving identity shares
-        vector<uint32_t> identity_result;
-        this->dataowner.recv(identity_result);
-        vector<ZZ_p> identity_temp(identity_result.begin(), identity_result.end());
-        swap(this->identity, identity_temp);
-        // for (int i=0; i<dest[0]*2; i++)
-        // {
-        //     uint32_t share;
-        //     this->dataowner.recv(share);
-        //     this->identity.push_back(conv<ZZ_p>(share));
 
-        // }
-        //receiving zscore shares
-        double shiftsize;
-        this->dataowner.recv(shiftsize);
-        this->shiftsize=shiftsize;
+        bool prelim = this->identity.empty() && this->zscores.empty();
+        int ready = static_cast<int>(prelim);
+        this->toOwner.send(ready);
+        if(prelim)
+        {   
+            cout << string(to_string(this->pid) + " ready to receive identity and zscores.\n");
+            //receiving identity shares
+            vector<uint32_t> identity_result;
+            this->dataowner.recv(identity_result);
+            vector<ZZ_p> identity_temp(identity_result.begin(), identity_result.end());
+            swap(this->identity, identity_temp);
+            
+            // receiving zscore shares
+            double shiftsize;
+            this->dataowner.recv(shiftsize);
+            this->shiftsize=shiftsize;
 
-        vector<uint32_t> zscore_result;
-        this->dataowner.recv(zscore_result);
-        vector<ZZ_p> zscore_temp(zscore_result.begin(), zscore_result.end());
-        swap(this->zscores, zscore_temp);
-        // for (int i=0; i<dest[0]*2; i++)
-        // {
-        //     uint32_t share;
-        //     this->dataowner.recv(share);
-        //     this->zscores.push_back(conv<ZZ_p>(share));
-        // }
+            vector<uint32_t> zscore_result;
+            this->dataowner.recv(zscore_result);
+            vector<ZZ_p> zscore_temp(zscore_result.begin(), zscore_result.end());
+            swap(this->zscores, zscore_temp);
+        }
+        
     }
     catch (const exception &e)
     {
@@ -200,10 +180,10 @@ void mpc::receiveSecrets()
     }
     // cout <<this->pid <<endl;
     // print_vector(this->identity);
-    cout << "Secrets received.\n";
+    cout << string(to_string(this->pid) + " Secrets received.\n");
 }
 
-template class std::vector<ZZ_p>;
+// template class std::vector<ZZ_p>;
 
 void mpc::assertSize(vector<ZZ_p> pi, string tag) {
     for (ZZ_p z : pi) {
@@ -286,32 +266,12 @@ vector<ZZ_p> mpc::reveal(vector<ZZ_p>& pi, bool isperm)
     this->fromMinus.recv(receivedMinus);
     this->fromPlus.recv(receivedPlus);
     
-    // std::unique_lock<std::mutex> lock(mtx);
-    // readyCounter.get().store(readyCounter.get() + 1);
-    // int counterValue = readyCounter.get().load();
-    // if (counterValue % 3 == 0) {
-    //     // cout << "reveal counter: " << readyCounter.get() << " pid: " << this->pid << endl;
-    //     // readyCounter.get().store(0); // Reset the counter for the next iteration
-    //     // cout << "readyCounter: " << readyCounter.get() << endl;
-    //     lock.unlock();
-    //     cv.get().notify_all();
-    // } else {
-    //     int div = readyCounter.get().load() / 3;
-    //     // cout << "reveal counter: " << readyCounter.get() << " pid: " << this->pid << endl;
-    //     cv.get().wait(lock, [this, div]{ 
-    //         // cout << "notified! " << readyCounter.get().load() << " pid: " << this->pid << endl;
-    //         return readyCounter.get().load() / 3 > div; 
-    //         });
-    // }
-    // string output = string("reveal exit: ").append(to_string(this->pid)).append("!\n");
-    // cout << output;
-    
     
     if (receivedMinus != receivedPlus) 
     {
         cout << "error! in " << this->pid << endl;
-        // print_vector(receivedMinus);
-        // print_vector(receivedPlus);
+        print_vector(receivedMinus);
+        print_vector(receivedPlus);
         try 
         {
             throw logic_error("received inputs do not match."); // <-- THIS IS SOMETIMES THROWN BUT NOT CAUGHT
@@ -367,9 +327,7 @@ vector<ZZ_p> mpc::reveal(vector<ZZ_p>& pi, bool isperm)
 void mpc::reshare(vector<ZZ_p>& shares, int reshareID)
 {
     vector<ZZ_p> randoms(3);
-    // mutex mutex;
-    // condition_variable cv;
-
+    vector<uint32_t> sendvec;
     if (reshareID == (this->pid + 1) % 3) // share to plus
     {
         auto minus_it = this->seedpair.find((this->pid + 2) % 3);
@@ -383,10 +341,10 @@ void mpc::reshare(vector<ZZ_p>& shares, int reshareID)
         {
             shares[2*j]+=randoms[this->pid];
             shares[2*j+1]+=randoms[(this->pid +1)%3];
-            this->toPlus.send(conv<uint32_t>(shares[2*j+1]));
+            sendvec.push_back(conv<uint32_t>(shares[2*j+1]));
+            // this->toPlus.send(conv<uint32_t>(shares[2*j+1]));
         }
-        // cout << this->pid << " finished.\n";
-
+        this->toPlus.send(sendvec);
     }
     else if (reshareID == (this->pid + 2) % 3) //share to minus
     {
@@ -401,42 +359,91 @@ void mpc::reshare(vector<ZZ_p>& shares, int reshareID)
         {
             shares[2*j]+=randoms[this->pid];
             shares[2*j+1]+=randoms[(this->pid +1)%3];
-            this->toMinus.send(conv<uint32_t>(shares[2*j]));
+            sendvec.push_back(conv<uint32_t>(shares[2*j]));
         }
-        // cout << this->pid << " finished.\n";
-
+        this->toMinus.send(sendvec);
     }
     else 
     {
-       vector<uint32_t> newshare(shares.size());
+       vector<ZZ_p> newshare(shares.size());
+       vector<uint32_t> minus(shares.size()/2), plus(shares.size()/2);
+       this->fromMinus.recv(minus);
+       this->fromPlus.recv(plus);
         for (int i=0; i<shares.size()/2; i++)
         {
-            this->fromMinus.recv(newshare[2*i]);
-            this->fromPlus.recv(newshare[2*i+1]);
+            newshare[2*i] = to_ZZ_p(minus[i]);
+            newshare[2*i+1] = to_ZZ_p(plus[i]);
+            // this->fromMinus.recv(newshare[2*i]);
+            // this->fromPlus.recv(newshare[2*i+1]);
         }
-        vector<ZZ_p> temp(newshare.begin(), newshare.end());
-        shares.swap(temp); 
-        // cout << this->pid << " finished.\n";
+        // vector<ZZ_p> temp(newshare.begin(), newshare.end());
+        shares.swap(newshare); 
 
     }
-        // cout << this->pid << endl;
-    // {
-    //     std::unique_lock<std::mutex> lock(mtx);
-    //     readyCounter.get().store(readyCounter.get() + 1);
-    //     int counterValue = readyCounter.get().load();
-    //     if (counterValue % 3 == 0) {
-    //         // cout << "counter: " << readyCounter.get() << endl;
-    //         // readyCounter.get().store(0); // Reset the counter for the next iteration
-    //         cv.get().notify_all();
-    //     } else {
-    //         int div = readyCounter.get().load() / 3;
-    //         // cout << "counter: " << readyCounter.get() << endl;
-    //         cv.get().wait(lock, [this, div]{ return readyCounter.get().load() / 3 > div; });
-    //     }
-    // }
-    // cout << "reshared." << endl;
 }
-
+void mpc::reshareM(vector<vector<ZZ_p>>& shares, int reshareID)
+{
+    vector<ZZ_p> randoms(3);
+    vector<vector<uint32_t>> sendvec(shares.size(), vector<uint32_t>(shares[0].size()));
+    if (reshareID == (this->pid + 1) % 3) // share to plus
+    {
+        auto minus_it = this->seedpair.find((this->pid + 2) % 3);
+        PRNG &minus_PRNG = *(minus_it->second);
+        for (int i=0; i<2; i++)
+        {
+            randoms[i] = to_ZZ_p(minus_PRNG.get<uint32_t>());
+        }
+        randoms[2] = -randoms[0]-randoms[1];
+        for (int i=0; i<shares.size(); i++)
+        {
+            for (int j=0; j<shares[0].size()/2; j++)
+            {
+                shares[i][2*j]+=randoms[this->pid];
+                shares[i][2*j+1]+=randoms[(this->pid +1)%3];
+                sendvec[i][j] = conv<uint32_t>(shares[i][2*j+1]);
+            }
+            this->toPlus.send(sendvec[i]); 
+        }
+    }
+    else if (reshareID == (this->pid + 2) % 3) //share to minus
+    {
+        auto plus_it = this->seedpair.find((this->pid + 1) % 3);
+        PRNG &plus_PRNG = *(plus_it->second);
+        for (int i=0; i<2; i++)
+        {
+            randoms[i] = to_ZZ_p(plus_PRNG.get<uint32_t>());
+        }
+        randoms[2] = -randoms[0]-randoms[1];
+        for (int i=0; i<shares.size(); i++)
+        {
+            for (int j=0; j<shares[0].size()/2; j++)
+            {
+                shares[i][2*j]+=randoms[this->pid];
+                shares[i][2*j+1]+=randoms[(this->pid +1)%3];
+                sendvec[i][j] = conv<uint32_t>(shares[i][2*j]);
+            }
+            this->toMinus.send(sendvec[i]);
+        }
+    }
+    else 
+    {
+       vector<vector<ZZ_p>> newshare(shares.size(), vector<ZZ_p>(shares[0].size()));
+        for(int i=0; i<shares.size(); i++)
+        {
+            vector<uint32_t> minus(shares[0].size());
+            vector<uint32_t> plus(shares[0].size());
+            this->fromMinus.recv(minus);
+            this->fromPlus.recv(plus);
+            for(int j=0; j<shares[0].size()/2; j++)
+            {
+                newshare[i][2*j] = to_ZZ_p(minus[j]);
+                newshare[i][2*j+1] = to_ZZ_p(plus[j]);
+            }
+        }
+        // vector<vector<ZZ_p>> temp(newshare.begin(), newshare.end());
+        shares.swap(newshare); 
+    }
+}
 //is adding alpha beta gamma necessary? 
 vector<ZZ_p> mpc::Fmult(vector<ZZ_p> k_i, vector<ZZ_p> s_i)
 {
@@ -509,7 +516,6 @@ vector<ZZ_p> mpc::inversePerm(vector<ZZ_p> pi)
 
 void mpc::apply_perm_local(bool participate, vector<ZZ_p> &v, vector<ZZ_p> &pi)
 {
-    // cout << this->pid << " apply_perm_local entered.\n";
     if (participate)
     {
         for (ZZ_p z : pi) 
@@ -547,71 +553,60 @@ void mpc::apply_perm_local(bool participate, vector<ZZ_p> &v, vector<ZZ_p> &pi)
             {
                 cerr << "Exception caught: " << e.what() << std::endl;
             }
-            // uint64_t pi2 = conv<uint64_t>(pi[2*i+1]);
-            // v2[(pi_i-1)*2] =v[2*i];
-            // v2[(pi_i-1)*2+1]=v[2*i+1];
         }
         // return v2;
         v = std::move(v2);
     }
-    // std::unique_lock<std::mutex> lock(mtx);
-    // readyCounter.get().store(readyCounter.get() + 1);
-    // int counterValue = readyCounter.get().load();
-    // if (counterValue % 3 == 0) 
-    // {
-    //     // cout << "counter: " << readyCounter.get() << endl;
-    //     // readyCounter.get().store(0); // Reset the counter for the next iteration
-    //     cv.get().notify_all();
-    // } else 
-    // {
-    //     int div = readyCounter.get().load() / 3;
-    //     // cout << "counter: " << readyCounter.get() << endl;
-    //     cv.get().wait(lock, [this, div]{ return readyCounter.get().load() / 3 > div; });
-    // }
 }
-// void mpc::apply_perm_local(vector<ZZ_p> &v, vector<ZZ_p> &pi, int partnerID)
-// {
-//     vector<uint32_t> share1, share2;
-//     vector<uint32_t> received;
-//     for (int i=0; i<v.size()/2; i++)
-//     {
-//         uint32_t r = conv<uint32_t>(v[2*i]);
-//         uint32_t q = conv<uint32_t>(v[2*i+1]);
-//         share1.push_back(r);
-//         share2.push_back(q);
-//     }
-//     auto partner_it = this->seedpair.find(partnerID);
-//     PRNG &sharedPRNG = *(partner_it->second);
-//     if (partnerID==(this->pid+1)%3) //partner is plus
-//     {
-//         this->toPlus.send(share1);
-//         this->fromPlus.recv(received);
-//     }
-//     if (partnerID==(this->pid+2)%3) //partner is minus
-//     {
-//         this->toMinus.send(share2);
-//         this->fromMinus.recv(received);
-//     }
-    
-//     vector<ZZ_p> reconstructed, newvec(received.size()), to_share(3);
-//     for (int i=0; i<received.size(); i++)
-//     {
-//         ZZ_p result_p = conv<ZZ_p>(received[i])+conv<ZZ_p>(share1[i])+conv<ZZ_p>(share2[i]);
-//         reconstructed.push_back(result_p);
-//         uint32_t idx = conv<uint32_t>(pi[i]);
-//         newvec[idx-1] = result_p;
-//     }
-//     for (int j=0; j<newvec.size(); j++)
-//     {
-//         to_share[0] = to_ZZ_p(sharedPRNG.get<uint32_t>());
-//         to_share[1] = to_ZZ_p(sharedPRNG.get<uint32_t>());
-//         to_share[2] = newvec[j] - to_share[0] - to_share[1];
-//         v[2*j] = to_share[this->pid];
-//         v[2*j+1] = to_share[(this->pid+1)%3];
-//     }
-//     // return newvec;
-// }
-
+void mpc::apply_perm_localM(bool participate, vector<vector<ZZ_p>> &v, vector<ZZ_p> &pi)
+{
+    if (participate)
+    {
+        for (ZZ_p z : pi) 
+        {
+            uint32_t value = conv<uint32_t>(z);
+            if (value > pi.size()) 
+            {
+                cout << "apply_perm_local." << endl;
+                cout << "value: " << value << endl;
+                cout << "size of vector: " << pi.size() << endl;
+                throw logic_error("permutation is bigger than vector size.");
+            }
+        }
+        if (pi.size() != v.size())
+            throw std::invalid_argument("local permutation should be half the size of shared vector");
+        // if (v.size() % 2 != 0)
+        //     throw invalid_argument("v size is not divisible by 2.");
+        vector<vector<ZZ_p>> v2(v.size(), vector<ZZ_p>(v[0].size()));
+        for (size_t i=0; i<v.size(); i++)
+        {
+            uint32_t idx = conv<uint32_t>(pi[i]-1);
+            v2[idx] = v[i];
+        }
+        // for (uint32_t i = 0; i < v.size()/2; i++)
+        // {
+        //     if (2 * i + 1 >= v.size()) 
+        //     {
+        //         cout << "i too high" << i << "size: " << v.size() << endl;
+        //     }
+        //     try
+        //     {
+        //         uint32_t idx1 = conv<uint32_t>((pi[i])-1)*2;
+        //         uint32_t idx2 = conv<uint32_t>((pi[i])-1)*2+1;
+        //         // v2[(pi_i-1)*2] =v[2*i];
+        //         // v2[(pi_i-1)*2+1]=v[2*i+1];
+        //         v2[idx1] =v[2*i];
+        //         v2[idx2]=v[2*i+1];
+        //     }
+        //     catch (const std::exception &e)
+        //     {
+        //         cerr << "Exception caught: " << e.what() << std::endl;
+        //     }
+        // }
+        // return v2;
+        v = std::move(v2);
+    }
+}
 void mpc::shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a)
 {
     assertSize(pi, "Shuffle");
@@ -650,20 +645,6 @@ void mpc::shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a)
         apply_perm_local(true, a, pi_m);
         reshare(a, 0);
     }
-    // std::unique_lock<std::mutex> lock(mtx);
-    // readyCounter.get().store(readyCounter.get() + 1);
-    // int counterValue = readyCounter.get().load();
-    // if (counterValue % 3 == 0) 
-    // {
-    //     // cout << "Close counter: " << readyCounter.get() << endl;
-    //     // readyCounter.get().store(0); // Reset the counter for the next iteration
-    //     cv.get().notify_all();
-    // } else 
-    // {
-    //     int div = readyCounter.get().load() / 3;
-    //     // cout << "Close counter: " << readyCounter.get() << endl;
-    //     cv.get().wait(lock, [this, div]{ return readyCounter.get().load() == 0  > div; });
-    // }
 }
 
 void mpc::unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b)
@@ -707,6 +688,59 @@ void mpc::unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b)
     }
 }
 
+void mpc::shuffleM(vector<ZZ_p> &pi, vector<vector<ZZ_p>> &a)
+{
+    assertSize(pi, "Shuffle");
+    // if (pi.size() != a.size())
+    //     throw std::invalid_argument("Your shares and pi size are different");
+    vector<ZZ_p> pi_m(pi.size()/2), pi_p(pi.size()/2);
+    for (int i=0; i<pi.size()/2; i++)
+    {
+        pi_m[i] = pi[2*i];
+        pi_p[i] = pi[2*i+1];
+    }
+    if (this->pid == 0)
+    {   
+        apply_perm_localM(true, a, pi_m);
+        reshareM(a, 1);
+        apply_perm_localM(true, a, pi_p);
+        reshareM(a, 2);
+        apply_perm_localM(false, a, pi);
+        reshareM(a, 0);
+    }
+    else if (this->pid == 1)
+    {
+        apply_perm_localM(false, a, pi);
+        reshareM(a, 1);
+        apply_perm_localM(true,a, pi_m);
+        reshareM(a, 2);
+        apply_perm_localM(true,a, pi_p);
+        reshareM(a, 0);
+    }
+    else
+    {
+        apply_perm_localM(true, a, pi_p);
+        reshareM(a, 1);
+        apply_perm_localM(false, a, pi);
+        reshareM(a, 2);
+        apply_perm_localM(true, a, pi_m);
+        reshareM(a, 0);
+    }
+}
+void mpc::testMatrix(vector<ZZ_p>& pi)
+{
+    if(this->pid !=0)
+    {
+        print_vector(this->pheno);
+        print_vector(pi);
+    }
+        
+    shuffleM(pi, this->pheno);
+    // vector<ZZ_p> revealp = reveal(this->pheno);
+    if(this->pid !=0)
+        print_vector(this->pheno);
+    
+}
 void mpc::apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k)
 {
     if (rho.size() != k.size()){
@@ -793,7 +827,9 @@ vector<double> mpc::genperm(int row, int numCol)
     vector<ZZ_p> k_i(2*this->n);
     k_i.assign(this->shares.begin(), this->shares.begin() + 2*this->n);
     cout <<"assigned" <<endl;
-    
+    vector<ZZ_p> inv_rho, inv_cdf;
+    inv_rho.assign(this->identity.begin(), this->identity.end());
+    inv_cdf.assign(this->zscores.begin(), this->zscores.end());
     try
     {
         vector<ZZ_p> sigma = genbitperm(k_i);
@@ -814,9 +850,9 @@ vector<double> mpc::genperm(int row, int numCol)
         }
         cout << "loop finished.\n";
         vector<ZZ_p> reconstructed = reveal(sigma, false); 
-        apply_shared_perm(sigma, this->identity);
-        apply_shared_perm(this->identity, this->zscores);
-        vector<ZZ_p> zscores_result = reveal(this->zscores, false); // check if this changes after running multiple times TODO
+        apply_shared_perm(sigma, inv_rho);
+        apply_shared_perm(inv_rho, inv_cdf);
+        vector<ZZ_p> zscores_result = reveal(inv_cdf, false); // check if this changes after running multiple times TODO
 
         // writeVectorToCSV(zscores_result, this->pid, 0, "unfiltered");
         vector<uint32_t> zscores_uint = convVec(zscores_result);
@@ -860,16 +896,116 @@ vector<double> mpc::genperm(int row, int numCol)
         //     assert_equal(resultZZ, reconstructed, "genperm result");
         // }
     }
-    catch(const std::logic_error &e){
-        cerr << "Exception caught: " << e.what() << std::endl;
-    }
+    // catch(const std::logic_error &e){
+    //     cerr << "Exception caught: " << e.what() << std::endl;
+    // }
     catch (const std::exception &e)
     {
         cerr << "Exception caught: " << e.what() << std::endl;
     }
     
 }
-
+void mpc::receiveMatrix()
+{
+    // vector<int> shape;
+    vector<uint32_t> mat1, mat2;
+    this->dataowner.recv(this->shape);
+    this->dataowner.recv(mat1);
+    this->dataowner.recv(mat2);
+    print_vector(this->shape);
+    cout << mat1.size() <<endl;
+    cout << mat2.size() << endl;
+    for (int i=0; i<this->shape[0]; i++)
+    {
+        vector<ZZ_p> row;
+        for (int j=0; j<this->shape[1]; j++)
+        {
+            // cout << string(to_string(i)+ " " + to_string(j)+"\n");
+            // cout << mat1[2*i*shape[1]+2*j] << endl;
+            // cout << mat1[2*i*shape[1]+2*j+1] << endl;
+            row.push_back(to_ZZ_p(mat1[2*i*shape[1]+2*j]));
+            row.push_back(to_ZZ_p(mat1[2*i*shape[1]+2*j+1]));
+            // this->geno[i][2*j]=mat1[2*i*shape[1]+2*j];
+            // this->geno[i][2*j+1]=mat1[2*i*shape[1]+2*j+1];
+        }
+        this->geno.push_back(row);
+    }
+    for (int j=0; j<this->shape[2]; j++)
+    {
+        vector<ZZ_p> row;
+        for (int k=0; k<this->shape[3]; k++)
+        {
+            row.push_back(to_ZZ_p(mat2[2*j*shape[3]+2*k]));
+            row.push_back(to_ZZ_p(mat2[2*j*shape[3]+2*k+1]));
+            // this->pheno[j][2*k]=mat2[2*j*shape[3]+2*k];
+            // this->pheno[j][2*k+1]=mat2[2*j*shape[3]+2*k+1];
+        }
+        this->pheno.push_back(row);
+    }
+    // vector<ZZ_p> temp1(mat1.begin(), mat1.end());
+    // swap(this->geno, temp1);
+    // vector<ZZ_p> temp2(mat2.begin(), mat2.end());
+    // swap(this->pheno, temp2);
+    // vector<ZZ_p> recoveredg = reveal(this->geno, false);
+    // vector<ZZ_p> recoveredp = reveal(this->pheno,false);
+    // print_vector(this->geno);
+    // print_vector(this->pheno);
+    // vector<ZZ_p> multmat = matmult(this->geno, this->pheno, this->shape[0], this->shape[1], this->shape[2], this->shape[3]);
+    // vector<ZZ_p> recoveredg = reveal(multmat, false);
+    // print_vector(recoveredg);
+}
+vector<ZZ_p> mpc::matmult(vector<ZZ_p> mat1, vector<ZZ_p>mat2, int row1, int col1, int row2, int col2)
+{
+    if (col1 != row2)
+        throw logic_error("mat1 column size and mat2 row size do not match.");
+    vector<ZZ_p> result(row1 * col2);
+    // print_vector(this->pheno);
+    // for (int i = 0; i < row1; ++i) 
+    // { // row index
+    //     for (int j = 0; j < col2; ++j) 
+    //     { // col index
+    //         vector<ZZ_p> vec1(this->geno.begin()+col1*i*2, this->geno.begin()+col1*(i+1)*2);
+    //         vector<ZZ_p> vec2(row2*2);
+    //         for (int m = 0; m < row2; m++) 
+    //         {
+                
+    //             // cout << string("col2:"+to_string(col2)+" m:"+to_string(m)+"/ j:"+to_string(j)+"/ index:"+to_string(2*m*col2+j*col2)+"\n");
+    //             vec2[2*m]=this->pheno[2*m*col2+j*2];
+    //             vec2[2*m+1]=this->pheno[2*m*col2+j*2+1]; 
+    //         }
+    //         // vector<ZZ_p> revec2 = reveal(vec2,false);
+    //         // print_vector(vec2);
+    //         ZZ_p sum=to_ZZ_p(0);
+    //         for (int k=0; k<vec2.size()/2; k++)
+    //         {
+    //             sum += vec1[2*k]*vec2[2*k]+vec1[2*k+1]*vec2[2*k]+vec1[2*k]*vec2[2*k+1];
+    //         }
+    //         result[i*col2+j] = sum;
+    //         // cout << string("row"+to_string(i)+" col"+to_string(j)+" :"+to_string(conv<int>(sum)))<<endl;
+    //         // vector<ZZ_p> revec1 = reveal(vec1,false);
+    //         // print_vector(revec1);
+    //         // for (int k = 0; k < col1; ++k) {
+    //         //     result[i * col2 + j] += mat1[i * col1 + k] * mat2[k * col2 + j];
+    //         // }
+    //     }
+    // }
+    // vector<uint32_t> result1 = convVec(result);
+    // this->toMinus.send(result1);
+    // vector<uint32_t> result2;
+    // this->fromPlus.recv(result2);
+    // if (result1.size() != result2.size())
+    //     throw runtime_error("matmul result shares are not the same size.");
+    vector<ZZ_p> finalresult(result.size()*2);
+    // for (size_t i=0; i<result1.size(); i++)
+    // {
+    //     finalresult[i*2] = conv<ZZ_p>(result1[i]);
+    //     finalresult[i*2+1] = conv<ZZ_p>(result2[i]);
+    // }
+    // // print_vector(finalresult);
+    // vector<ZZ_p> recovered = reveal(finalresult, false);
+    // print_vector(recovered);
+    return finalresult;
+}
 void mpc::close()
 {
     // clearVectors();
