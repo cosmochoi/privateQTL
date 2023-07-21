@@ -101,8 +101,9 @@ bool mpc::setupSeeds()
     }
     try
     {
-        PRNG prng(oc::toBlock(this->pid)); //initializing private prng with pid..?
-        uint32_t plusSeed = prng.get<uint32_t>();
+        this->localprng = new PRNG(oc::toBlock(this->pid)); //NEEDS CHANGE
+
+        uint32_t plusSeed = this->localprng->get<uint32_t>();
         this->toPlus.send(plusSeed);
 
         uint32_t minusSeed;
@@ -448,12 +449,16 @@ void mpc::reshareM(vector<vector<ZZ_p>>& shares, int reshareID)
 vector<ZZ_p> mpc::Fmult(vector<ZZ_p> k_i, vector<ZZ_p> s_i)
 {
     auto minus_it = this->seedpair.find((this->pid + 2) % 3);
+    auto plus_it = this->seedpair.find((this->pid + 1) % 3);
     PRNG &minus_PRNG = *(minus_it->second);
+    PRNG &plus_PRNG = *(plus_it->second);
     vector<ZZ_p> t_i(2);
     ZZ_p ri = k_i[0]*s_i[0] + k_i[1]*s_i[0] + k_i[0]*s_i[1];
+    ri+=to_ZZ_p(minus_PRNG.get<uint32_t>()); // result + r1 - r2;
+    ri-=to_ZZ_p(plus_PRNG.get<uint32_t>());
     t_i[0]=ri;
-    this->toMinus.send(conv<int>(ri));
-    int received_data;
+    this->toMinus.send(conv<uint32_t>(ri));
+    uint32_t received_data;
     this->fromPlus.recv(received_data);
     conv(t_i[1], received_data);
     return t_i;
@@ -646,7 +651,6 @@ void mpc::shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a)
         reshare(a, 0);
     }
 }
-
 void mpc::unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b)
 {
     assertSize(pi, "unshuffle");
@@ -737,8 +741,8 @@ void mpc::testMatrix(vector<ZZ_p>& pi)
         
     shuffleM(pi, this->pheno);
     // vector<ZZ_p> revealp = reveal(this->pheno);
-    if(this->pid !=0)
-        print_vector(this->pheno);
+    // if(this->pid !=0)
+    //     print_vector(this->pheno);
     
 }
 void mpc::apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k)
@@ -912,9 +916,9 @@ void mpc::receiveMatrix()
     this->dataowner.recv(this->shape);
     this->dataowner.recv(mat1);
     this->dataowner.recv(mat2);
-    print_vector(this->shape);
-    cout << mat1.size() <<endl;
-    cout << mat2.size() << endl;
+    // print_vector(this->shape);
+    // cout << mat1.size() <<endl;
+    // cout << mat2.size() << endl;
     for (int i=0; i<this->shape[0]; i++)
     {
         vector<ZZ_p> row;
@@ -942,68 +946,145 @@ void mpc::receiveMatrix()
         }
         this->pheno.push_back(row);
     }
-    // vector<ZZ_p> temp1(mat1.begin(), mat1.end());
-    // swap(this->geno, temp1);
-    // vector<ZZ_p> temp2(mat2.begin(), mat2.end());
-    // swap(this->pheno, temp2);
-    // vector<ZZ_p> recoveredg = reveal(this->geno, false);
-    // vector<ZZ_p> recoveredp = reveal(this->pheno,false);
-    // print_vector(this->geno);
     // print_vector(this->pheno);
-    // vector<ZZ_p> multmat = matmult(this->geno, this->pheno, this->shape[0], this->shape[1], this->shape[2], this->shape[3]);
+    // vector<ZZ_p> temp(mat2.begin(), mat2.end());
+    // vector<ZZ_p> recoveredp = reveal(temp,false);
+    // print_vector(recoveredp);
+    // vector<vector<ZZ_p>> multmat = matmult(this->geno, this->pheno, this->shape[0], this->shape[1], this->shape[2], this->shape[3]);
+    // for (int i=0; i<multmat.size(); i++)
+    // {
+    //     vector<ZZ_p> recoveredg = reveal(multmat[i], false);
+    //     if (this->pid==0)
+    //         print_vector(recoveredg);
+    // }
     // vector<ZZ_p> recoveredg = reveal(multmat, false);
     // print_vector(recoveredg);
 }
-vector<ZZ_p> mpc::matmult(vector<ZZ_p> mat1, vector<ZZ_p>mat2, int row1, int col1, int row2, int col2)
+vector<vector<ZZ_p>> transpose(vector<vector<ZZ_p>>& matrix) {
+    int rows = matrix.size();
+    int cols = matrix[0].size()/2;
+    vector<vector<ZZ_p>> transposed(cols, vector<ZZ_p>(rows*2));
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            transposed[j][2*i] = matrix[i][2*j];
+            transposed[j][2*i+1] = matrix[i][2*j+1];
+        }
+    }
+    return transposed;
+}
+void mpc::logRatio()
+{
+    // pseudo-reference is average log counts across all samples, for each gene
+    uint32_t gene = this->pheno.size();
+    uint32_t sample = this->pheno[0].size();
+    // cout << string(to_string(this->pheno.size())+ to_string(this->pheno[0].size())+"\n");
+    vector<uint32_t> sumvec;
+    vector<double> pseudoref;
+    vector<vector<double>> ratios(this->pheno.size(), vector<double>(this->pheno[0].size()));
+    vector<double> sendback;
+    for (int i=0; i<gene; i++)
+    {
+        ZZ_p sum=to_ZZ_p(0);
+        for (int j=0; j<sample; j++)
+        {
+            sum+=this->pheno[i][j];
+        }
+
+        // double avg = conv<uint32_t>(sum)/static_cast<double>(sample);
+        // cout <<sum<<endl;
+        sumvec.push_back(conv<uint32_t>(sum));
+    }
+    vector<uint32_t> v1, v2;
+    this->toMinus.send(sumvec);
+    this->toPlus.send(sumvec);
+    this->fromMinus.recv(v1);
+    this->fromPlus.recv(v2);
+    for (int i=0; i<sumvec.size();i++)
+    {
+        ZZ_p totalsum=to_ZZ_p(sumvec[i]);
+        totalsum+=to_ZZ_p(v1[i]);
+        totalsum+=to_ZZ_p(v2[i]);
+        pseudoref.push_back(conv<uint32_t>(totalsum)/static_cast<double>(sample));
+    }
+    // vector<ZZ_p> pseudosum = reveal(pseudoref,false);
+    // print_vector(pseudoref);
+    for (int i=0; i<gene; i++)
+    {
+        for(int j=0; j<sample; j++)
+        {
+            ratios[i][j] = conv<uint32_t>(this->pheno[i][j]) - pseudoref[i];
+            sendback.push_back(ratios[i][j]);
+        }
+    }
+    // print_vector(sendback);
+    this->toOwner.send(pseudoref);
+}
+vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p>>& mat2, int row1, int col1, int row2, int col2)
 {
     if (col1 != row2)
         throw logic_error("mat1 column size and mat2 row size do not match.");
-    vector<ZZ_p> result(row1 * col2);
-    // print_vector(this->pheno);
-    // for (int i = 0; i < row1; ++i) 
-    // { // row index
-    //     for (int j = 0; j < col2; ++j) 
-    //     { // col index
-    //         vector<ZZ_p> vec1(this->geno.begin()+col1*i*2, this->geno.begin()+col1*(i+1)*2);
-    //         vector<ZZ_p> vec2(row2*2);
-    //         for (int m = 0; m < row2; m++) 
-    //         {
+    vector<vector<ZZ_p>> result(row1, vector<ZZ_p>(col2));
+    vector<vector<ZZ_p>> transposed = transpose(mat2);
+    for (int i = 0; i < row1; ++i) 
+    { // row index
+        for (int j = 0; j < col2; ++j) 
+        { // col index
+            vector<ZZ_p> vec1=mat1[i];
+            vector<ZZ_p> vec2=transposed[j];
+            // for (int m = 0; m < row2; m++) 
+            // {
                 
-    //             // cout << string("col2:"+to_string(col2)+" m:"+to_string(m)+"/ j:"+to_string(j)+"/ index:"+to_string(2*m*col2+j*col2)+"\n");
-    //             vec2[2*m]=this->pheno[2*m*col2+j*2];
-    //             vec2[2*m+1]=this->pheno[2*m*col2+j*2+1]; 
-    //         }
-    //         // vector<ZZ_p> revec2 = reveal(vec2,false);
-    //         // print_vector(vec2);
-    //         ZZ_p sum=to_ZZ_p(0);
-    //         for (int k=0; k<vec2.size()/2; k++)
-    //         {
-    //             sum += vec1[2*k]*vec2[2*k]+vec1[2*k+1]*vec2[2*k]+vec1[2*k]*vec2[2*k+1];
-    //         }
-    //         result[i*col2+j] = sum;
-    //         // cout << string("row"+to_string(i)+" col"+to_string(j)+" :"+to_string(conv<int>(sum)))<<endl;
-    //         // vector<ZZ_p> revec1 = reveal(vec1,false);
-    //         // print_vector(revec1);
-    //         // for (int k = 0; k < col1; ++k) {
-    //         //     result[i * col2 + j] += mat1[i * col1 + k] * mat2[k * col2 + j];
-    //         // }
-    //     }
-    // }
-    // vector<uint32_t> result1 = convVec(result);
+            //     // cout << string("col2:"+to_string(col2)+" m:"+to_string(m)+"/ j:"+to_string(j)+"/ index:"+to_string(2*m*col2+j*col2)+"\n");
+            //     vec2[2*m]=this->pheno[2*m*col2+j*2];
+            //     vec2[2*m+1]=this->pheno[2*m*col2+j*2+1]; 
+            // }
+            // vector<ZZ_p> revec2 = reveal(vec2,false);
+            // print_vector(vec2);
+            ZZ_p sum=to_ZZ_p(0);
+            for (int k=0; k<vec2.size()/2; k++)
+            {
+                sum += vec1[2*k]*vec2[2*k]+vec1[2*k+1]*vec2[2*k]+vec1[2*k]*vec2[2*k+1];
+            }
+            result[i][j] = sum;
+            // cout << string("row"+to_string(i)+" col"+to_string(j)+" :"+to_string(conv<int>(sum)))<<endl;
+            // vector<ZZ_p> revec1 = reveal(vec1,false);
+            // print_vector(revec1);
+            // for (int k = 0; k < col1; ++k) {
+            //     result[i * col2 + j] += mat1[i * col1 + k] * mat2[k * col2 + j];
+            // }
+        }
+    }
+    vector<vector<ZZ_p>> finalresult(row1, vector<ZZ_p>(col2*2));
+    for (int ridx=0; ridx<result.size(); ridx++)
+    {
+        vector<uint32_t> result1 = convVec(result[ridx]);
+        this->toMinus.send(result1);
+        vector<uint32_t> result2;
+        this->fromPlus.recv(result2);
+        if (result1.size() != result2.size())
+            throw runtime_error("matmul result shares are not the same size.");
+        for (int cidx=0; cidx<result[0].size(); cidx++)
+        {
+            finalresult[ridx][2*cidx] = to_ZZ_p(result1[cidx]);
+            finalresult[ridx][2*cidx+1] = to_ZZ_p(result2[cidx]);
+        }
+        // vector<ZZ_p> recovered = reveal(finalresult[ridx], false);
+        // print_vector(recovered);
+    }
+    
     // this->toMinus.send(result1);
     // vector<uint32_t> result2;
     // this->fromPlus.recv(result2);
     // if (result1.size() != result2.size())
     //     throw runtime_error("matmul result shares are not the same size.");
-    vector<ZZ_p> finalresult(result.size()*2);
+    // vector<ZZ_p> finalresult(result.size()*2);
     // for (size_t i=0; i<result1.size(); i++)
     // {
     //     finalresult[i*2] = conv<ZZ_p>(result1[i]);
     //     finalresult[i*2+1] = conv<ZZ_p>(result2[i]);
     // }
-    // // print_vector(finalresult);
-    // vector<ZZ_p> recovered = reveal(finalresult, false);
-    // print_vector(recovered);
+    // print_vector(finalresult);
+    
     return finalresult;
 }
 void mpc::close()

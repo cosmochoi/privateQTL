@@ -80,12 +80,14 @@ public:
         // zscores.clear();
     }
     void receiveMatrix();
-    vector<ZZ_p> matmult(vector<ZZ_p> mat1, vector<ZZ_p>mat2, int row1, int col1, int row2, int col2);
+    void logRatio();
+    vector<vector<ZZ_p>> matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p>>& mat2, int row1, int col1, int row2, int col2);
     void close();
 
 private:
     block commonSeed = oc::toBlock(27);
     map<int, PRNG *> seedpair;
+    PRNG* localprng;
     vector<ZZ_p> shares;
     vector<ZZ_p> identity;
     vector<ZZ_p> zscores;

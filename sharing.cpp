@@ -16,6 +16,76 @@ void bitdecompose(vector<uint32_t> &secrets, vector<BitVector> *bitInput)
     }
 }
 
+vector<double> get_quantiles(vector<vector<double>>& phen_matrix, vector<vector<size_t>>& rank_matrix) {
+    // vector<vector<size_t>> rank_matrix(phen_matrix[0].size(), vector<size_t>(phen_matrix.size()));
+    for (size_t i = 0; i < phen_matrix[0].size(); i++) {
+        vector<pair<double, size_t>> sorted_indices;
+        for (size_t j = 0; j < phen_matrix.size(); j++) {
+            sorted_indices.emplace_back(phen_matrix[j][i], j);
+        }
+        sort(sorted_indices.begin(), sorted_indices.end());
+        for (size_t j = 0; j < phen_matrix.size(); j++) {
+            rank_matrix[i][j] = sorted_indices[j].second;
+        }
+    }
+
+    // vector<vector<double>> M = phen_matrix;
+    // vector<vector<size_t>> Q = rank_matrix;
+    size_t m = phen_matrix.size();
+    size_t n = phen_matrix[0].size();
+
+    vector<double> quantiles(m, 0.0);
+    for (size_t i = 0; i < n; i++) {
+        for (size_t j = 0; j < m; j++) {
+            quantiles[j] += phen_matrix[rank_matrix[i][j]][i];
+        }
+    }
+
+    return quantiles;
+}
+
+vector<vector<double>> sample_QN(vector<vector<double>>& phen_matrix, vector<vector<size_t>>& rank_matrix, vector<double>& total_quantiles) {
+    // vector<vector<size_t>> rank_matrix(phen_matrix[0].size(), vector<size_t>(phen_matrix.size()));
+    // for (size_t i = 0; i < phen_matrix[0].size(); i++) {
+    //     vector<pair<double, size_t>> sorted_indices;
+    //     for (size_t j = 0; j < phen_matrix.size(); j++) {
+    //         sorted_indices.emplace_back(phen_matrix[j][i], j);
+    //     }
+    //     sort(sorted_indices.begin(), sorted_indices.end());
+    //     for (size_t j = 0; j < phen_matrix.size(); j++) {
+    //         rank_matrix[i][j] = sorted_indices[j].second;
+    //     }
+    // }
+
+    // vector<vector<double>> M = phen_matrix;
+    // vector<vector<size_t>> Q = rank_matrix;
+    size_t m = phen_matrix.size();
+    size_t n = phen_matrix[0].size();
+
+    for (size_t i = 0; i < n; i++) {
+        for (size_t j = 0; j < m; j++) {
+            phen_matrix[rank_matrix[i][j]][i] = total_quantiles[j];
+        }
+    }
+    return phen_matrix;
+}
+
+double findMedian(const vector<vector<double>>& matrix, size_t col) {
+    vector<double> columnData;
+    for (const auto& row : matrix) {
+        columnData.push_back(row[col]);
+    }
+
+    sort(columnData.begin(), columnData.end());
+
+    size_t size = columnData.size();
+    if (size % 2 == 0) {
+        return (columnData[size / 2 - 1] + columnData[size / 2]) / 2.0;
+    } else {
+        return columnData[size / 2];
+    }
+}
+
 void dataclient(int sendport1, int recvport1, string address1, int sendport2, int recvport2, string address2, int sendport3, int recvport3, string address3,int rowstart, int rowend,int numCol, string zscorefile)
 {
     IOService ios;
@@ -53,14 +123,27 @@ void dataclient(int sendport1, int recvport1, string address1, int sendport2, in
             // bitvector representation of input
             
             vector<uint32_t> secrets = ScaleVector(input, pow(10,2)); // integer version of secret
+            auto smax = max_element(secrets.begin(), secrets.end());
+            // uint32_t absmax = abs(*smax);
+            uint32_t maxsecret = nearestPowerOf2(*smax);
             bitdecompose(secrets, &bitInput);
 
             NTL::SetSeed((NTL::conv<NTL::ZZ>((long)27))); // Seed change
-            cout << "size of input: " << bitInput.size() << endl;
-            // cout << "size of each vector: " << bitInput[0].size() << endl;
-
-            uint32_t p = nearestPowerOf2(bitInput.size());
-            // uint32_t p=32768;
+            /// ZSCORE FILE
+            string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/"+zscorefile+".txt");
+            // string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/" + zscorefile + ".txt");
+            vector<double> zscore_input = CSVtoVector(zscore_filename);
+            auto min = min_element(zscore_input.begin(), zscore_input.end());
+            double shiftsize = abs(*min);
+            // cout << "shift size: " << shiftsize << endl;
+            vector<double> zscores_shifted = ShiftVector(zscore_input, shiftsize);
+            vector<uint32_t> zscores_scaled = ScaleVector(zscores_shifted, pow(10,2));
+            auto max = max_element(zscores_scaled.begin(), zscores_scaled.end());
+            uint32_t maxzscore = *max;
+            uint32_t maxzsecret = nearestPowerOf2(maxzscore);
+            uint32_t secretsize = nearestPowerOf2(bitInput.size());
+            uint32_t p = 32768;
+            // uint32_t p = (maxsecret > maxzsecret) ? ((maxsecret > secretsize) ? maxsecret : secretsize) : ((maxzsecret > secretsize) ? maxzsecret : secretsize);
             cout << "P: " << p << endl;
             ZZ_p::init(to_ZZ(p)); 
             uint32_t inv = PowerMod(3, -1, p);
@@ -106,17 +189,17 @@ void dataclient(int sendport1, int recvport1, string address1, int sendport2, in
             if ((prelim1 == 1) && (prelim1 ==1) && (prelim1==1))
             {
                 cout << "Client will share zscore and identity.\n";
-                string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/"+zscorefile+".txt");
+                // string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/"+zscorefile+".txt");
                 // string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/" + zscorefile + ".txt");
-                vector<double> zscore_input = CSVtoVector(zscore_filename);
+                // vector<double> zscore_input = CSVtoVector(zscore_filename);
                 // print_vector(zscore_input);
                 // vector<int32_t> zscores_int = ScaleVector_signed(zscore_input, pow(10,5));
-                auto min = min_element(zscore_input.begin(), zscore_input.end());
-                double shiftsize = abs(*min);
+                // auto min = min_element(zscore_input.begin(), zscore_input.end());
+                // double shiftsize = abs(*min);
                 // cout << "shift size: " << shiftsize << endl;
-                vector<double> zscores_shifted = ShiftVector(zscore_input, shiftsize);
-                vector<uint32_t> zscores_scaled = ScaleVector(zscores_shifted, pow(10,2));
-                cout << "zscores size: " << zscores_scaled.size() << endl;
+                // vector<double> zscores_shifted = ShiftVector(zscore_input, shiftsize);
+                // vector<uint32_t> zscores_scaled = ScaleVector(zscores_shifted, pow(10,2));
+                // cout << "zscores size: " << zscores_scaled.size() << endl;
                 vector<vector<uint32_t>> identity_shares;
                 for (int i = 0; i < 3; i++) {
                     identity_shares.push_back(vector<uint32_t>());
@@ -170,46 +253,81 @@ void dataclient(int sendport1, int recvport1, string address1, int sendport2, in
             cout << "Sent secret shared row values to parties.\n";
         }
     }
-    vector<uint32_t> testg = {1,2,3,4,5,6,1,2,3,4,5,6};
-    vector<uint32_t> testp = {1,1,1,2,2,2,3,3,3,4,4,4};
+    vector<vector<uint32_t>> testg = {{1,2,3,4},{5,6,1,2},{3,4,5,6}};
+    vector<vector<uint32_t>> testp = {{1,0,3,3},{4,5,6,6},{7,8,9,6},{10,11,12,4}};
     vector<vector<uint32_t>> genoshares, phenoshares;
     for (int i = 0; i < 3; i++) {
         genoshares.push_back(vector<uint32_t>());
         phenoshares.push_back(vector<uint32_t>());
     }
-    //sending identity shares
-    for (int j=0; j< testg.size(); j++)
+    //sending geno pheno shares
+    for (int i=0; i< testg.size(); i++)
     {
-        ZZ_p i1 = random_ZZ_p();
-        ZZ_p i2 = random_ZZ_p();
-        ZZ_p i3 = conv<ZZ_p>(testg[j]) - i1 - i2;
-        uint32_t send_i1 = conv<uint32_t>(i1);
-        uint32_t send_i2 = conv<uint32_t>(i2);
-        uint32_t send_i3 = conv<uint32_t>(i3);
-        genoshares[0].push_back(send_i1);
-        genoshares[0].push_back(send_i2);
-        genoshares[1].push_back(send_i2);
-        genoshares[1].push_back(send_i3);
-        genoshares[2].push_back(send_i3);
-        genoshares[2].push_back(send_i1);
+        for (int j=0; j< testg[0].size(); j++)
+        {
+            ZZ_p i1 = random_ZZ_p();
+            ZZ_p i2 = random_ZZ_p();
+            ZZ_p i3 = conv<ZZ_p>(testg[i][j]) - i1 - i2;
+            uint32_t send_i1 = conv<uint32_t>(i1);
+            uint32_t send_i2 = conv<uint32_t>(i2);
+            uint32_t send_i3 = conv<uint32_t>(i3);
+            genoshares[0].push_back(send_i1);
+            genoshares[0].push_back(send_i2);
+            genoshares[1].push_back(send_i2);
+            genoshares[1].push_back(send_i3);
+            genoshares[2].push_back(send_i3);
+            genoshares[2].push_back(send_i1);
+        }
     }
-    for (int j=0; j< testp.size(); j++)
+    uint32_t testp_row = testp.size();
+    uint32_t testp_col = testp[0].size();
+    uint32_t testg_row = testg.size();
+    uint32_t testg_col = testg[0].size();
+    vector<int> exclude;
+    for (int i=0; i<testp.size(); i++)
     {
-        ZZ_p i1 = random_ZZ_p();
-        ZZ_p i2 = random_ZZ_p();
-        ZZ_p i3 = conv<ZZ_p>(testp[j]) - i1 - i2;
-        uint32_t send_i1 = conv<uint32_t>(i1);
-        uint32_t send_i2 = conv<uint32_t>(i2);
-        uint32_t send_i3 = conv<uint32_t>(i3);
-        phenoshares[0].push_back(send_i1);
-        phenoshares[0].push_back(send_i2);
-        phenoshares[1].push_back(send_i2);
-        phenoshares[1].push_back(send_i3);
-        phenoshares[2].push_back(send_i3);
-        phenoshares[2].push_back(send_i1);
+        vector<uint32_t> share1_row, share2_row, share3_row;
+        for (int j=0; j< testp[0].size(); j++)
+        {
+            if (testp[i][j]<=0)
+            {
+                share1_row.clear();
+                share2_row.clear();
+                share3_row.clear();
+                testp_row--;
+                exclude.push_back(i);
+                break;
+            }
+            double logcount = log(testp[i][j]);
+            uint32_t scaledcount = logcount*pow(10,3);
+            ZZ_p i1 = random_ZZ_p();
+            ZZ_p i2 = random_ZZ_p();
+            ZZ_p i3 = conv<ZZ_p>(scaledcount) - i1 - i2;
+            uint32_t send_i1 = conv<uint32_t>(i1);
+            uint32_t send_i2 = conv<uint32_t>(i2);
+            uint32_t send_i3 = conv<uint32_t>(i3);
+            share1_row.push_back(send_i1);
+            share1_row.push_back(send_i2);
+            share2_row.push_back(send_i2);
+            share2_row.push_back(send_i3);
+            share3_row.push_back(send_i3);
+            share3_row.push_back(send_i1);
+        }
+        phenoshares[0].insert(phenoshares[0].end(), share1_row.begin(), share1_row.end());
+        phenoshares[1].insert(phenoshares[1].end(), share2_row.begin(), share2_row.end());
+        phenoshares[2].insert(phenoshares[2].end(), share3_row.begin(), share3_row.end());
+        // phenoshares[0].push_back(send_i2);
+        // phenoshares[1].push_back(send_i2);
+        // phenoshares[1].push_back(send_i3);
+        // phenoshares[2].push_back(send_i3);
+        // phenoshares[2].push_back(send_i1);
     }
-    vector<uint32_t> matshape = {3,4,4,3};
-    // vector<int> mat2shape = {3,2};
+    std::vector<uint32_t> matshape = {
+        static_cast<uint32_t>(testg.size()),
+        static_cast<uint32_t>(testg[0].size()),
+        static_cast<uint32_t>(testp_row),
+        static_cast<uint32_t>(testp_col)
+    };
     owner_p1.send(matshape);
     owner_p2.send(matshape);
     owner_p3.send(matshape);
@@ -220,6 +338,42 @@ void dataclient(int sendport1, int recvport1, string address1, int sendport2, in
     owner_p2.send(phenoshares[1]);
     owner_p3.send(phenoshares[2]);
     cout << "Sent secret shared geno pheno to parties.\n";
+    vector<double> ref1, ref2, ref3;
+    cout << testp.size()-exclude.size() << endl;
+    vector<vector<double>> finalratio(testp[0].size(), vector<double>(testp.size()-exclude.size()));
+    p1_owner.recv(ref1);
+    p2_owner.recv(ref2);
+    p3_owner.recv(ref3);
+    print_vector(ref1);
+    int skipped = 0;
+    for (int i=0; i<testp.size(); i++)
+    {
+        auto it = find(exclude.begin(), exclude.end(), i);
+        if (it != exclude.end())
+        {
+            cout <<string("Gene "+to_string(i)+" excluded;\n");
+            skipped++;
+            continue;
+        }
+        for(int j=0; j<testp[0].size();j++)
+        {
+            // double logcount = log(testp[i][j]);
+            finalratio[j][i-skipped] = log(testp[i][j]) - ref1[i-skipped]/pow(10,3);
+        }
+    }
+    vector<double> sizefactors;
+    for (int j=0; j<finalratio.size(); j++)
+    {
+        sort(finalratio[j].begin(), finalratio[j].end());
+        size_t size = finalratio[j].size();
+        if (size % 2 == 0) {
+            double medval = (finalratio[j][size / 2 - 1] + finalratio[j][size / 2]) / 2.0;
+            sizefactors.push_back(exp(medval));
+        } else {
+            sizefactors.push_back(exp(finalratio[j][size / 2]));
+        }
+    }
+    print_vector(sizefactors);
     owner_p1.close();
     owner_p2.close();
     owner_p3.close();
@@ -270,8 +424,8 @@ void runMPC(int pid,  string ownerIP, int ownerPort, int toOwnerPort,  string ad
         testmpc.clearVectors();
     }
     testmpc.receiveMatrix();
-    vector<ZZ_p> random = testmpc.Frand(4);
-    testmpc.testMatrix(random);
+    // vector<ZZ_p> random = testmpc.Frand(4);
+    testmpc.logRatio();
     testmpc.close();
     swap(resultVector, resultVectors);
 }
@@ -382,7 +536,7 @@ int main(int argc, char* argv[])
     int startingPort = 12300;
     int assignedPorts=0;
     vector<int> openPorts;
-    while (assignedPorts < 48)
+    while (assignedPorts < 24)
     {
         int port = startingPort;
         if(isPortOpen(port))
@@ -405,9 +559,9 @@ int main(int argc, char* argv[])
     thread thread1([&]() {
         startMPCset(openPorts, 0, address, lo_row, mid_row, samplecount, zscorefile, 0, resultVec1);
     });
-    thread thread2([&]() {
-        startMPCset(openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2);
-    });
+    // thread thread2([&]() {
+    //     startMPCset(openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2);
+    // });
     // thread thread3([&]() {
     //     startMPCset(openPorts, 24, address, 2, 3,samplecount,zscorefile, 0, resultVec3);
     // });
@@ -415,16 +569,16 @@ int main(int argc, char* argv[])
     //     startMPCset(openPorts, 36, address, 3, 4,samplecount,zscorefile, 0, resultVec4);
     // });
     threads.emplace_back(move(thread1));
-    threads.emplace_back(move(thread2));
+    // threads.emplace_back(move(thread2));
     // threads.emplace_back(move(thread3));
     // threads.emplace_back(move(thread4));
     for (auto& thread : threads) {
         thread.join();
     }
-    cout << resultVec1.size() << endl;
+    // cout << resultVec1.size() << endl;
     // cout << resultVec2[0].size() << endl;
     resultVec1.insert(resultVec1.end(), resultVec2.begin(), resultVec2.end());
-    cout << resultVec1.size() << endl;
+    // cout << resultVec1.size() << endl;
     // writematrixToTSV(resultVec1,lo_row,hi_row,"0714");
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = end - start;
