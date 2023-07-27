@@ -5,7 +5,7 @@ vector<ZZ_p> convVec(vector<uint32_t> v){
     vector<ZZ_p> converted(v.size());
     for (int i=0; i<v.size(); i++)
     {
-        converted[i] = conv<ZZ_p>(v[i]);
+        converted[i] = to_ZZ_p(v[i]);
     }
     return converted;
 }
@@ -18,7 +18,7 @@ vector<uint32_t> convVec(vector<ZZ_p> v){
     return converted;
 }
 
-double cal_accuracy(const vector<double>& predicted, const string& filename, int N, int numCol)
+double cal_accuracy(vector<double>& predicted, string& filename, int N, int numCol)
 {
    vector<double> actual = getRowFromMatrixFile(filename,N, numCol);
     // vector<double> actual = CSVtoVector(filename);
@@ -56,6 +56,9 @@ bool mpc::initialize(int pid, string ownerIP, int ownerPort, int toOwnerPort, st
     {
         cout << "PRNG setup failed.\n";
     }
+    this->dataowner.recv(this->p);
+    ZZ_p::init(to_ZZ(this->p));
+    this->p = p;
     return true;
 }
 bool mpc::setupChannels(string ownerIP, int ownerPort, int toOwnerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2)
@@ -137,8 +140,9 @@ void mpc::receiveSecrets()
 {
     vector<uint32_t> dest;
     this->dataowner.recv(dest);
-    this->p = dest[2];
-    ZZ_p::init(to_ZZ(dest[2])); ///p
+    cout << "vector size received.\n";
+    // this->p = dest[2];
+    // ZZ_p::init(to_ZZ(dest[2])); ///p
     this->n = dest[0]; //number of secrets
     this->lk = dest[1]; //number of bits
     this->inv = dest[3]; //inv 
@@ -147,9 +151,11 @@ void mpc::receiveSecrets()
     {
         // receiving shares;
         this->dataowner.recv(result);
-        vector<ZZ_p> temp(result.begin(), result.end());
+        vector<ZZ_p> temp(result.size());
+        temp = convVec(result);
+        // vector<ZZ_p> temp(result.begin(), result.end());
         swap(this->shares, temp);
-
+        cout <<"secrets received.\n";
         bool prelim = this->identity.empty() && this->zscores.empty();
         int ready = static_cast<int>(prelim);
         this->toOwner.send(ready);
@@ -867,13 +873,13 @@ vector<double> mpc::genperm(int row, int numCol)
         // writeVectorToCSV(zscores_int, this->pid, row, "unscaled_unshifted");
         // vector<double> zscores = UnscaleVector_signed(zscores_int, pow(10,5));
         // writeVectorToCSV(zscores, this->pid, row, "unshift_descaled");
-        string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/accuracy_combination/correctQN.tsv";
+        string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/qn.tsv";
         // string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/toyQN.tsv";
         double accuracy = cal_accuracy(zscores_double, zscore_filename, row, numCol);
         if (this->pid == 0)
         {
             cout << string("row: " + to_string(row) + "/ pid" + to_string(this->pid) + ": " + to_string(accuracy)) << endl;
-            // writeVectorToCSV(zscores_double, this->pid, row, "0628");
+            writeVectorToCSV(zscores_double, this->pid, row, "0726");
         }
             
         return zscores_double;
@@ -911,7 +917,8 @@ vector<double> mpc::genperm(int row, int numCol)
 }
 void mpc::receiveMatrix()
 {
-    // vector<int> shape;
+    // uint32_t p;
+    
     vector<uint32_t> mat1, mat2;
     this->dataowner.recv(this->shape);
     this->dataowner.recv(mat1);
@@ -977,7 +984,7 @@ void mpc::logRatio()
     // pseudo-reference is average log counts across all samples, for each gene
     uint32_t gene = this->pheno.size();
     uint32_t sample = this->pheno[0].size();
-    // cout << string(to_string(this->pheno.size())+ to_string(this->pheno[0].size())+"\n");
+    // cout << string(to_string(this->pheno.size())+" / "+ to_string(this->pheno[0].size())+"\n");
     vector<uint32_t> sumvec;
     vector<double> pseudoref;
     vector<vector<double>> ratios(this->pheno.size(), vector<double>(this->pheno[0].size()));
@@ -994,6 +1001,7 @@ void mpc::logRatio()
         // cout <<sum<<endl;
         sumvec.push_back(conv<uint32_t>(sum));
     }
+    // print_vector(sumvec);
     vector<uint32_t> v1, v2;
     this->toMinus.send(sumvec);
     this->toPlus.send(sumvec);
@@ -1004,18 +1012,19 @@ void mpc::logRatio()
         ZZ_p totalsum=to_ZZ_p(sumvec[i]);
         totalsum+=to_ZZ_p(v1[i]);
         totalsum+=to_ZZ_p(v2[i]);
+        // cout <<totalsum;
         pseudoref.push_back(conv<uint32_t>(totalsum)/static_cast<double>(sample));
     }
     // vector<ZZ_p> pseudosum = reveal(pseudoref,false);
     // print_vector(pseudoref);
-    for (int i=0; i<gene; i++)
-    {
-        for(int j=0; j<sample; j++)
-        {
-            ratios[i][j] = conv<uint32_t>(this->pheno[i][j]) - pseudoref[i];
-            sendback.push_back(ratios[i][j]);
-        }
-    }
+    // for (int i=0; i<gene; i++)
+    // {
+    //     for(int j=0; j<sample; j++)
+    //     {
+    //         ratios[i][j] = conv<uint32_t>(this->pheno[i][j]) - pseudoref[i];
+    //         sendback.push_back(ratios[i][j]);
+    //     }
+    // }
     // print_vector(sendback);
     this->toOwner.send(pseudoref);
 }
