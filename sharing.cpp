@@ -3,7 +3,7 @@
 #include <cmath>
 #include "utils.h"
 #include <chrono>
-
+#include "input.h"
 
 void bitdecompose(vector<uint32_t> &secrets, vector<BitVector> &bitInput)
 {
@@ -15,7 +15,46 @@ void bitdecompose(vector<uint32_t> &secrets, vector<BitVector> &bitInput)
         bitInput.push_back(decomposed);
     }
 }
+vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, int numCol) {
+    vector<vector<double>> rowsData;
+    ifstream data(filename);
+    string line;
+    int currentRow = 0;
 
+    // Skip the first row (header)
+    getline(data, line);
+
+    while (getline(data, line) && currentRow < endrow) {
+        if (currentRow >= startrow) { // Start reading from startrow
+            stringstream lineStream(line);
+            string cell;
+            int currentColumn = 0;
+
+            // Skip the first column
+            getline(lineStream, cell, '\t');
+
+            vector<double> rowVector;
+            while (currentColumn < numCol && getline(lineStream, cell, '\t')) {
+                try {
+                    double entry = stod(cell);
+                    rowVector.push_back(entry);
+                } catch (const exception& e) {
+                    cerr << "Exception caught: " << e.what() << endl;
+                }
+                currentColumn++;
+            }
+
+            rowsData.push_back(rowVector);
+        }
+
+        currentRow++;
+    }
+
+    // Close the file after reading
+    data.close();
+
+    return rowsData;
+}
 vector<double> get_quantiles(vector<vector<double>>& phen_matrix, vector<vector<size_t>>& rank_matrix) {
     // vector<vector<size_t>> rank_matrix(phen_matrix[0].size(), vector<size_t>(phen_matrix.size()));
     for (size_t i = 0; i < phen_matrix[0].size(); i++) {
@@ -130,25 +169,24 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
     owner_p2.send(p);
     owner_p3.send(p);
     auto pre_start = chrono::high_resolution_clock::now();
+    vector<string> geneID;
     if (norm_method == "qn")
     {
-        string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/GTEx_Analysis_gene_tpm_matched_filtered.gct";
-        cout << "1\n";
-        pheno = getTPMFromMatrixFile(matched, 25949, 15253);
-        cout << "2\n";
+        // string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/GTEx_Analysis_gene_tpm_matched_filtered.gct";
+        string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/blood_tpm_matched_filtered.tsv";
+        pheno = getTPMFromMatrixFile(matched, geneID, 25949, 15253);
         // print_vector(testss);
         vector<vector<size_t>> rank(pheno[0].size(), vector<size_t>(pheno.size()));
         vector<double> quantiles =get_quantiles(pheno, rank);
-        cout << "3\n";
         sample_QN(pheno, rank, quantiles);
-        cout << "4\n";
-        
+        cout << "Quantile normalization completed.\n";
     }
     else if (norm_method == "deseq2")
     {
         vector<vector<uint32_t>> testg = {{1,2,3,4},{5,6,1,2},{3,4,5,6}};
-        string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/GTEx_Analysis_gene_counts_matched_filtered.gct";
-        vector<vector<uint32_t>> testp =getCountFromMatrixFile(matched,25949,15253);
+        // string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/GTEx_Analysis_gene_counts_matched_filtered.gct";
+        string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/blood_reads_matched_filtered.tsv";
+        vector<vector<uint32_t>> testp = getCountFromMatrixFile(matched,geneID, 25949,15253);
         vector<vector<double>> cpm_df = deseq2_cpm(testp);
         // print_vector(cpm_df);
         // vector<vector<uint32_t>> pheno = ScaleVector(cpm_df, pow(10,3));
@@ -305,7 +343,16 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             // string filename ="/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/testdata2.txt";
             // vector<double> input = pheno[r][:numCol];
             vector<double> input(pheno[r].begin(), pheno[r].begin() + numCol);
-            
+            cout << string("gene "+ geneID[r]+"\n");
+            string pheno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/bed_template.tsv";
+            string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_centered.tsv";
+            string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variantdf.tsv";
+            prepareInput testinput(pheno_pos, geno_matrix,geno_pos,1000000);
+            vector<uint32_t> range;
+            string chromosome = testinput.getCisRange(geneID[r],range);
+            cout << string("gene "+geneID[r]+"/chr "+ chromosome+ "/start "+ to_string(range[0])+"/end "+ to_string(range[1])+"\n");
+            vector<vector<int32_t>> slicedgeno = testinput.sliceGeno(range, chromosome);
+            cout << string("genotype shape: "+ to_string(slicedgeno.size())+"/ "+to_string(slicedgeno[0].size())+"\n");
             vector<uint32_t> secrets = ScaleVector(input, pow(10,3)); // integer version of secret
             auto smax = max_element(secrets.begin(), secrets.end());
             // uint32_t absmax = abs(*smax);
@@ -314,7 +361,7 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
 
             
             /// ZSCORE FILE
-            string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/"+zscorefile+".txt");
+            string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/"+zscorefile+".txt");
             // string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/" + zscorefile + ".txt");
             vector<double> zscore_input = CSVtoVector(zscore_filename);
             auto min = min_element(zscore_input.begin(), zscore_input.end());
@@ -478,7 +525,7 @@ void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toO
     testmpc.initialize(pid, ownerIP, ownerPort, toOwnerPort, address1, recPort1, sendPort1, address2, recPort2, sendPort2);
     if (norm_method == "deseq2")
     {
-        testmpc.receiveMatrix();
+        testmpc.receivePheno();
     // vector<ZZ_p> random = testmpc.Frand(4);
         testmpc.logRatio();
     }
@@ -489,7 +536,7 @@ void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toO
         vector<double> row_result;
         testmpc.ready();
         testmpc.receiveSecrets();
-        row_result=testmpc.genperm(row, numCol);
+        row_result=testmpc.genperm(row, numCol, norm_method);
         resultVectors.emplace_back(row_result);
         testmpc.clearVectors();
     }
@@ -497,7 +544,7 @@ void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toO
     chrono::duration<double> duration = invcdf_end - invcdf_start;
     double durationInSeconds = duration.count();
     double durationInminutes = durationInSeconds/60.0;
-    cout << string(to_string(pid)+" inverseCDF Execution time: " + to_string(durationInminutes) + " minutes\n") << endl;
+    cout << string("pid "+to_string(pid)+" inverseCDF Execution time: " + to_string(durationInminutes) + " minutes\n") << endl;
     testmpc.close();
     swap(resultVector, resultVectors);
 }
@@ -593,6 +640,43 @@ void writematrixToTSV(const vector<vector<T>>& data, int startrow, int endrow, c
         cout << "Error opening the file." << endl;
     }
 }
+double cal_accuracy(vector<vector<double>>& predicted, string& filename, int startrow, int endrow, int numCol)
+{
+   vector<vector<double>> actual = getMatrixFile(filename,startrow, endrow, numCol);
+    // vector<double> actual = CSVtoVector(filename);
+    // cout << string("actual matrix shape:" + to_string(actual.size())+ ","+to_string(actual[0].size())+"\n");
+    // cout << string("predicted matrix shape:" + to_string(predicted.size())+ ","+to_string(predicted[0].size())+"\n");
+    if (predicted.size() != actual.size()) {
+        cout << "predicted size: " + to_string(predicted.size()) << endl;
+        cout << "actual size: " + to_string(actual.size()) << endl;
+        // throw runtime_error("Vector sizes do not match");
+    }
+
+    double sumSquaredDiff = 0.0;
+    double max=0.0, min=0.0;
+    for (size_t i = 0; i < predicted.size(); ++i) {
+        for (size_t j=0; j<predicted[0].size(); ++j)
+        {
+            double diff = predicted[i][j] - actual[i][j];
+            sumSquaredDiff += diff * diff;
+            if (actual[i][j]>=max)
+                max=actual[i][j];
+            if (actual[i][j]<=min)
+                min=actual[i][j];
+        }
+        
+    }
+
+    double mse = sumSquaredDiff / (predicted.size()*predicted[0].size());
+    double rmse = sqrt(mse);
+    // cout << string("RMSE: " + to_string(rmse)) << endl;
+    double normalized = max-min;
+    // auto max = max_element(actual.begin(), actual.end());
+    // auto min = min_element(actual.begin(), actual.end());
+    // double normalized = *max - *min;
+    return 1.0 - rmse/normalized;
+
+}
 int main(int argc, char* argv[])
 {
     if (argc < 5)
@@ -632,9 +716,9 @@ int main(int argc, char* argv[])
     thread thread1([&]() {
         startMPCset(norm_method, openPorts, 0, address, lo_row, mid_row, samplecount, zscorefile, 0, resultVec1);
     });
-    // thread thread2([&]() {
-    //     startMPCset(openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2);
-    // });
+    thread thread2([&]() {
+        startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2);
+    });
     // thread thread3([&]() {
     //     startMPCset(openPorts, 24, address, 2, 3,samplecount,zscorefile, 0, resultVec3);
     // });
@@ -642,7 +726,7 @@ int main(int argc, char* argv[])
     //     startMPCset(openPorts, 36, address, 3, 4,samplecount,zscorefile, 0, resultVec4);
     // });
     threads.emplace_back(move(thread1));
-    // threads.emplace_back(move(thread2));
+    threads.emplace_back(move(thread2));
     // threads.emplace_back(move(thread3));
     // threads.emplace_back(move(thread4));
     for (auto& thread : threads) {
@@ -651,8 +735,22 @@ int main(int argc, char* argv[])
     // cout << resultVec1.size() << endl;
     // cout << resultVec2[0].size() << endl;
     resultVec1.insert(resultVec1.end(), resultVec2.begin(), resultVec2.end());
-    // cout << resultVec1.size() << endl;
-    // writematrixToTSV(resultVec1,lo_row,hi_row,"0714");
+    string actual_filename;
+    if (norm_method == "qn")
+    {
+        actual_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/qn.tsv";
+    }
+    else if (norm_method == "deseq2")
+    {
+        actual_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/deseq2.tsv";
+    }
+    else 
+    {
+        throw invalid_argument("either QN or deseq2 normalization please.");
+    }
+    double accuracy = cal_accuracy(resultVec1, actual_filename, lo_row, hi_row, samplecount);
+    cout << string("row "+to_string(lo_row)+" to "+to_string(hi_row)+" accuracy: "+ to_string(accuracy)+"\n");
+    writematrixToTSV(resultVec1,lo_row,hi_row,"0728");
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> totalduration = end - start;
     double totaldurationInSeconds = totalduration.count();

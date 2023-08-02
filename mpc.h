@@ -73,13 +73,13 @@ public:
     void apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k);
     void compose(vector<ZZ_p> &sigma, vector<ZZ_p> &rho);
     // vector<ZZ_p> get_shared_inverse(vector<ZZ_p> sigma);
-    vector<double> genperm(int row, int numCol);
+    vector<double> genperm(int row, int numCol,string norm_method);
     void clearVectors() {
         shares.clear();
         // identity.clear();
         // zscores.clear();
     }
-    void receiveMatrix();
+    void receivePheno();
     void logRatio();
     vector<vector<ZZ_p>> matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p>>& mat2, int row1, int col1, int row2, int col2);
     void close();

@@ -832,7 +832,7 @@ void writeVectorToCSV(const std::vector<T>& data, int pid, int row, string name)
     }
 }
 
-vector<double> mpc::genperm(int row, int numCol)
+vector<double> mpc::genperm(int row, int numCol, string norm_method)
 {
     vector<ZZ_p> k_i(2*this->n);
     k_i.assign(this->shares.begin(), this->shares.begin() + 2*this->n);
@@ -872,14 +872,25 @@ vector<double> mpc::genperm(int row, int numCol)
         // print_vector(zscores_int);
         // writeVectorToCSV(zscores_int, this->pid, row, "unscaled_unshifted");
         // vector<double> zscores = UnscaleVector_signed(zscores_int, pow(10,5));
-        // writeVectorToCSV(zscores, this->pid, row, "unshift_descaled");
-        string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/qn.tsv";
+        string zscore_filename;
+        if (norm_method == "qn")
+        {
+            zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/qn.tsv";
+        }
+        else if (norm_method == "deseq2")
+        {
+            zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/deseq2.tsv";
+        }
+        else 
+        {
+            throw invalid_argument("either QN or deseq2 normalization please.");
+        }
         // string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/toyQN.tsv";
         double accuracy = cal_accuracy(zscores_double, zscore_filename, row, numCol);
         if (this->pid == 0)
         {
             cout << string("row: " + to_string(row) + "/ pid" + to_string(this->pid) + ": " + to_string(accuracy)) << endl;
-            writeVectorToCSV(zscores_double, this->pid, row, "0726");
+            // writeVectorToCSV(zscores_double, this->pid, row, "0726");
         }
             
         return zscores_double;
@@ -915,7 +926,7 @@ vector<double> mpc::genperm(int row, int numCol)
     }
     
 }
-void mpc::receiveMatrix()
+void mpc::receivePheno()
 {
     // uint32_t p;
     
