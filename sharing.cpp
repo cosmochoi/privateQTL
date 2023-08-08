@@ -191,39 +191,39 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         // print_vector(cpm_df);
         // vector<vector<uint32_t>> pheno = ScaleVector(cpm_df, pow(10,3));
         // vector<vector<uint32_t>> testp = {{1,0,3,3},{4,5,6,6},{7,8,9,6},{10,11,12,4}};
-        vector<vector<uint32_t>> genoshares, phenoshares;
+        vector<vector<uint32_t>> phenoshares;
         for (int i = 0; i < 3; i++) {
-            genoshares.push_back(vector<uint32_t>());
+            // genoshares.push_back(vector<uint32_t>());
             phenoshares.push_back(vector<uint32_t>());
         }
         // sending geno pheno shares
-        for (int i=0; i< testg.size(); i++)
-        {
-            for (int j=0; j< testg[0].size(); j++)
-            {
-                ZZ_p i1 = random_ZZ_p();
-                ZZ_p i2 = random_ZZ_p();
-                ZZ_p i3 = conv<ZZ_p>(testg[i][j]) - i1 - i2;
-                uint32_t send_i1 = conv<uint32_t>(i1);
-                uint32_t send_i2 = conv<uint32_t>(i2);
-                uint32_t send_i3 = conv<uint32_t>(i3);
-                genoshares[0].push_back(send_i1);
-                genoshares[0].push_back(send_i2);
-                genoshares[1].push_back(send_i2);
-                genoshares[1].push_back(send_i3);
-                genoshares[2].push_back(send_i3);
-                genoshares[2].push_back(send_i1);
-            }
-        }
+        // for (int i=0; i< testg.size(); i++)
+        // {
+        //     for (int j=0; j< testg[0].size(); j++)
+        //     {
+        //         ZZ_p i1 = random_ZZ_p();
+        //         ZZ_p i2 = random_ZZ_p();
+        //         ZZ_p i3 = conv<ZZ_p>(testg[i][j]) - i1 - i2;
+        //         uint32_t send_i1 = conv<uint32_t>(i1);
+        //         uint32_t send_i2 = conv<uint32_t>(i2);
+        //         uint32_t send_i3 = conv<uint32_t>(i3);
+        //         genoshares[0].push_back(send_i1);
+        //         genoshares[0].push_back(send_i2);
+        //         genoshares[1].push_back(send_i2);
+        //         genoshares[1].push_back(send_i3);
+        //         genoshares[2].push_back(send_i3);
+        //         genoshares[2].push_back(send_i1);
+        //     }
+        // }
         uint32_t testp_row = cpm_df.size();
         uint32_t testp_col = cpm_df[0].size();
-        uint32_t testg_row = testg.size();
-        uint32_t testg_col = testg[0].size();
+        // uint32_t testg_row = testg.size();
+        // uint32_t testg_col = testg[0].size();
         vector<int> exclude;
         for (int i=0; i<cpm_df.size(); i++)
         {
             vector<uint32_t> share1_row, share2_row, share3_row;
-            for (int j=0; j< testp[0].size(); j++)
+            for (int j=0; j< cpm_df[0].size(); j++)
             {
                 if (cpm_df[i][j]<=0)
                 {
@@ -255,8 +255,8 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             phenoshares[2].insert(phenoshares[2].end(), share3_row.begin(), share3_row.end());
         }
         vector<uint32_t> matshape = {
-            static_cast<uint32_t>(testg.size()),
-            static_cast<uint32_t>(testg[0].size()),
+            // static_cast<uint32_t>(testg.size()),
+            // static_cast<uint32_t>(testg[0].size()),
             static_cast<uint32_t>(testp_row),
             static_cast<uint32_t>(testp_col)
         };
@@ -264,13 +264,15 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         owner_p1.send(matshape);
         owner_p2.send(matshape);
         owner_p3.send(matshape);
-        owner_p1.send(genoshares[0]);
-        owner_p2.send(genoshares[1]);
-        owner_p3.send(genoshares[2]);
+        // owner_p1.send(genoshares[0]);
+        // owner_p2.send(genoshares[1]);
+        // owner_p3.send(genoshares[2]);
+        print_vector(matshape);
+        cout << string("shares size: "+to_string(phenoshares[0].size())+"\n");
         owner_p1.send(phenoshares[0]);
         owner_p2.send(phenoshares[1]);
         owner_p3.send(phenoshares[2]);
-        cout << "Sent secret shared geno pheno to parties.\n";
+        cout << "Sent secret shared pheno to parties.\n";
         vector<double> ref1, ref2, ref3;
         // cout << testp.size()-exclude.size() << endl;
         vector<vector<double>> finalratio(testp[0].size(), vector<double>(testp.size()-exclude.size()));
@@ -342,8 +344,8 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
 
             // string filename ="/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/testdata2.txt";
             // vector<double> input = pheno[r][:numCol];
-            vector<double> input(pheno[r].begin(), pheno[r].begin() + numCol);
-            cout << string("gene "+ geneID[r]+"\n");
+            
+            // cout << string("gene "+ geneID[r]+"\n");
             string pheno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/bed_template.tsv";
             string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_centered.tsv";
             string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variantdf.tsv";
@@ -351,8 +353,14 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             vector<uint32_t> range;
             string chromosome = testinput.getCisRange(geneID[r],range);
             cout << string("gene "+geneID[r]+"/chr "+ chromosome+ "/start "+ to_string(range[0])+"/end "+ to_string(range[1])+"\n");
-            vector<vector<int32_t>> slicedgeno = testinput.sliceGeno(range, chromosome);
+            vector<vector<double>> slicedgeno = testinput.sliceGeno(range, chromosome, -1);
             cout << string("genotype shape: "+ to_string(slicedgeno.size())+"/ "+to_string(slicedgeno[0].size())+"\n");
+            for (int i=0;i<5; i++)
+            {
+                cout <<string(to_string(slicedgeno[i][0])+", "+to_string(slicedgeno[i][1])+", "+to_string(slicedgeno[i][2])+", "
+                +to_string(slicedgeno[i][3])+", "+to_string(slicedgeno[i][4])+"\n");
+            }
+            vector<double> input(pheno[r].begin(), pheno[r].begin() + numCol);
             vector<uint32_t> secrets = ScaleVector(input, pow(10,3)); // integer version of secret
             auto smax = max_element(secrets.begin(), secrets.end());
             // uint32_t absmax = abs(*smax);

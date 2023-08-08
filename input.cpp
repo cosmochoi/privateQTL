@@ -1,8 +1,8 @@
 #include "input.h"
 #include <typeinfo>
 // Data owners convert plink bed file to dataframe using gtex pipeline
-void getGenotype(const string& filename, vector<vector<int32_t>>& geno, vector<string>& snpID) {
-    vector<vector<int32_t>> rowsData;
+void getGenotype(const string& filename, vector<vector<double>>& geno, vector<string>& snpID) {
+    vector<vector<double>> rowsData;
     ifstream data(filename);
     string line;
     // int currentRow = 0;
@@ -20,10 +20,10 @@ void getGenotype(const string& filename, vector<vector<int32_t>>& geno, vector<s
         snpID.push_back(cell);
         // getline(lineStream, cell, '\t');
 
-        vector<int32_t> rowVector;
+        vector<double> rowVector;
         while (getline(lineStream, cell, '\t')) {
             try {
-                uint32_t entry = stoi(cell);
+                double entry = stod(cell);
                 rowVector.push_back(entry);
             } catch (const exception& e) {
                 cerr << "Exception caught: " << e.what() << endl;
@@ -102,10 +102,10 @@ vector<uint32_t> prepareInput::getSNPrange(uint32_t start, uint32_t end, string 
 { 
     // get snp indices that fall within range
     vector<uint32_t> indices;
-    cout << string("snpPos size: "+to_string(snpPos.size())+"\n");
-    cout << string("snpChr size: "+to_string(snpChr.size())+"\n");
-    cout << string("example snpPos: "+to_string(snpPos[0])+"\n");
-    cout << string("example snpChr: "+snpChr[0]+"\n");
+    // cout << string("snpPos size: "+to_string(snpPos.size())+"\n");
+    // cout << string("snpChr size: "+to_string(snpChr.size())+"\n");
+    // cout << string("example snpPos: "+to_string(snpPos[0])+"\n");
+    // cout << string("example snpChr: "+snpChr[0]+"\n");
     auto lb_it = lower_bound(snpPos.begin(), snpPos.end(), static_cast<int32_t>(start) - static_cast<int32_t>(ciswindow));
     auto ub_it = upper_bound(snpPos.begin(), snpPos.end(), end + ciswindow);
 
@@ -130,16 +130,42 @@ vector<uint32_t> prepareInput::getSNPrange(uint32_t start, uint32_t end, string 
     cout << string("Number of snps in cis range "+to_string(start)+"-"+to_string(end)+": "+to_string(indices.size())+"\n");
     return indices;
 }
-vector<vector<int32_t>> prepareInput::sliceGeno(vector<uint32_t> positions, string& chr)
+vector<vector<double>> prepareInput::sliceGeno(vector<uint32_t> positions, string& chr, int32_t missing)
 {
     uint32_t start = positions[0];
     uint32_t end = positions[1];
     vector<uint32_t> idx = getSNPrange(start, end, chr);
-    vector<vector<int32_t>> slicedmatrix;
+    vector<vector<double>> slicedmatrix;
     if (idx.size() == 0)
         throw invalid_argument("no indices within range");
+    int head = 0;
     for (uint32_t index : idx)
-    {
+    {   
+        if (head < 5)
+        {
+            cout <<string("index: "+to_string(index)+"\t>>"+to_string(geno[index][0])+", "+to_string(geno[index][1])+", "+to_string(geno[index][2])+", "+to_string(geno[index][3])+", "+to_string(geno[index][4])+"\n");
+            head++;
+        }
+
+
+        // cout << string("index: "+ to_string(index));
+
+        int sum = 0;
+        vector<int> missing_idx;
+        for (int j=0; j < geno[index].size(); j++)
+        {
+            if (geno[index][j]==missing)
+            {
+                missing_idx.push_back(j);
+                continue;
+            }
+            sum+=geno[index][j];
+        }
+        double avg = static_cast<double>(sum)/(geno[index].size()-missing_idx.size());
+        for (int i=0; i<missing_idx.size(); i++)
+        {
+            geno[index][missing_idx[i]] = avg;
+        }
         slicedmatrix.push_back(geno[index]);
     }
     cout << "slicing complete\n";
