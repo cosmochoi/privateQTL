@@ -15,14 +15,37 @@ void bitdecompose(vector<uint32_t> &secrets, vector<BitVector> &bitInput)
         bitInput.push_back(decomposed);
     }
 }
-vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, int numCol) {
+template <typename T>
+void writematrixToTSV(const vector<vector<T>>& data, int startrow, int endrow, const string& name)
+{
+    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + "_row" + std::to_string(startrow) + "_" + std::to_string(endrow) + ".tsv";
+    ofstream file(filename);
+    if (file.is_open())
+    {
+        for (int i = startrow; i <= endrow && i < data.size(); ++i)
+        {
+            for (const T& value : data[i])
+            {
+                file << value << "\t";
+            }
+            file << std::endl;
+        }
+        file.close();
+        cout << "Vector of vectors successfully written to TSV file." << endl;
+    }
+    else
+    {
+        cout << "Error opening the file." << endl;
+    }
+}
+vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, int numCol, bool header, bool index) {
     vector<vector<double>> rowsData;
     ifstream data(filename);
     string line;
     int currentRow = 0;
 
-    // Skip the first row (header)
-    getline(data, line);
+    if (header)// Skip the first row (header)
+        getline(data, line);
 
     while (getline(data, line) && currentRow < endrow) {
         if (currentRow >= startrow) { // Start reading from startrow
@@ -31,7 +54,8 @@ vector<vector<double>> getMatrixFile(const string& filename, int startrow, int e
             int currentColumn = 0;
 
             // Skip the first column
-            getline(lineStream, cell, '\t');
+            if (index)
+                getline(lineStream, cell, '\t');
 
             vector<double> rowVector;
             while (currentColumn < numCol && getline(lineStream, cell, '\t')) {
@@ -188,33 +212,12 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/blood_reads_matched_filtered.tsv";
         vector<vector<uint32_t>> testp = getCountFromMatrixFile(matched,geneID, 25949,15253);
         vector<vector<double>> cpm_df = deseq2_cpm(testp);
-        // print_vector(cpm_df);
-        // vector<vector<uint32_t>> pheno = ScaleVector(cpm_df, pow(10,3));
-        // vector<vector<uint32_t>> testp = {{1,0,3,3},{4,5,6,6},{7,8,9,6},{10,11,12,4}};
+
         vector<vector<uint32_t>> phenoshares;
         for (int i = 0; i < 3; i++) {
-            // genoshares.push_back(vector<uint32_t>());
             phenoshares.push_back(vector<uint32_t>());
         }
-        // sending geno pheno shares
-        // for (int i=0; i< testg.size(); i++)
-        // {
-        //     for (int j=0; j< testg[0].size(); j++)
-        //     {
-        //         ZZ_p i1 = random_ZZ_p();
-        //         ZZ_p i2 = random_ZZ_p();
-        //         ZZ_p i3 = conv<ZZ_p>(testg[i][j]) - i1 - i2;
-        //         uint32_t send_i1 = conv<uint32_t>(i1);
-        //         uint32_t send_i2 = conv<uint32_t>(i2);
-        //         uint32_t send_i3 = conv<uint32_t>(i3);
-        //         genoshares[0].push_back(send_i1);
-        //         genoshares[0].push_back(send_i2);
-        //         genoshares[1].push_back(send_i2);
-        //         genoshares[1].push_back(send_i3);
-        //         genoshares[2].push_back(send_i3);
-        //         genoshares[2].push_back(send_i1);
-        //     }
-        // }
+
         uint32_t testp_row = cpm_df.size();
         uint32_t testp_col = cpm_df[0].size();
         // uint32_t testg_row = testg.size();
@@ -264,11 +267,9 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         owner_p1.send(matshape);
         owner_p2.send(matshape);
         owner_p3.send(matshape);
-        // owner_p1.send(genoshares[0]);
-        // owner_p2.send(genoshares[1]);
-        // owner_p3.send(genoshares[2]);
+
         print_vector(matshape);
-        cout << string("shares size: "+to_string(phenoshares[0].size())+"\n");
+        // cout << string("shares size: "+to_string(phenoshares[0].size())+"\n");
         owner_p1.send(phenoshares[0]);
         owner_p2.send(phenoshares[1]);
         owner_p3.send(phenoshares[2]);
@@ -327,6 +328,7 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
     double durationInSeconds = duration.count();
     double durationInminutes = durationInSeconds/60.0;
     cout << "Normalization Execution time: " << durationInminutes << " minutes" << endl;
+    vector<vector<int32_t>> geno_scaled;
     for (int r=rowstart; r<rowend; r++)
     {
         int ready1, ready2, ready3;
@@ -335,7 +337,7 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         p3_owner.recv(ready3);
         if ((ready1 == 1) && (ready2 ==1) && (ready3==1))
         {
-            cout << "Client will send secrets.\n";
+            cout << "Client will send one phenotype\n";
             vector<BitVector> bitInput;
             // string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/samplewise_QN.tsv";
             // string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/accuracy_combination/correct_sampleQN.tsv";
@@ -349,17 +351,25 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             string pheno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/bed_template.tsv";
             string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_centered.tsv";
             string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variantdf.tsv";
-            prepareInput testinput(pheno_pos, geno_matrix,geno_pos,1000000);
-            vector<uint32_t> range;
-            string chromosome = testinput.getCisRange(geneID[r],range);
-            cout << string("gene "+geneID[r]+"/chr "+ chromosome+ "/start "+ to_string(range[0])+"/end "+ to_string(range[1])+"\n");
-            vector<vector<double>> slicedgeno = testinput.sliceGeno(range, chromosome, -1);
-            cout << string("genotype shape: "+ to_string(slicedgeno.size())+"/ "+to_string(slicedgeno[0].size())+"\n");
-            for (int i=0;i<5; i++)
-            {
-                cout <<string(to_string(slicedgeno[i][0])+", "+to_string(slicedgeno[i][1])+", "+to_string(slicedgeno[i][2])+", "
-                +to_string(slicedgeno[i][3])+", "+to_string(slicedgeno[i][4])+"\n");
-            }
+            // prepareInput testinput(pheno_pos, geno_matrix,geno_pos,1000000);
+            // vector<uint32_t> range;
+            // string chromosome = testinput.getCisRange(geneID[r],range);
+            // cout << string("gene "+geneID[r]+"/chr "+ chromosome+ "/start "+ to_string(range[0])+"/end "+ to_string(range[1])+"\n");
+            // vector<vector<double>> slicedgeno = testinput.sliceGeno(range, chromosome, -1);
+            // cout << string("genotype shape: "+ to_string(slicedgeno.size())+"/ "+to_string(slicedgeno[0].size())+"\n");
+            // geno_scaled = ScaleVector(slicedgeno, pow(10,2));
+
+            // writematrixToTSV(slicedgeno, 0,slicedgeno.size(), "genoscaled");
+            string genofile = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/genoscaled_row0_1361.tsv";
+            vector<vector<double>> slicedgeno = getMatrixFile(genofile, 0, 1362,numCol,false,false);
+            geno_scaled = ScaleVector(slicedgeno, pow(10,2));
+            // vector<vector<uint32_t>> geno_shifted = ShiftVector(geno_scaled, p);
+            // for (int i=0; i<5; i++)
+            // {
+            //     cout <<string("index: "+to_string(i)+"\t>>"+to_string(geno_shifted[i][0])+", "+to_string(geno_shifted[i][1])+", "+
+            //     to_string(geno_shifted[i][2])+", "+to_string(geno_shifted[i][3])+", "+to_string(geno_shifted[i][4])+"\n");
+
+            // }
             vector<double> input(pheno[r].begin(), pheno[r].begin() + numCol);
             vector<uint32_t> secrets = ScaleVector(input, pow(10,3)); // integer version of secret
             auto smax = max_element(secrets.begin(), secrets.end());
@@ -375,12 +385,13 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             auto min = min_element(zscore_input.begin(), zscore_input.end());
             double shiftsize = abs(*min);
             // cout << "shift size: " << shiftsize << endl;
-            vector<double> zscores_shifted = ShiftVector(zscore_input, shiftsize);
-            vector<uint32_t> zscores_scaled = ScaleVector(zscores_shifted, pow(10,2));
-            auto max = max_element(zscores_scaled.begin(), zscores_scaled.end());
-            uint32_t maxzscore = *max;
-            uint32_t maxzsecret = nearestPowerOf2(maxzscore);
-            uint32_t secretsize = nearestPowerOf2(bitInput.size());
+            vector<int32_t> zscores_scaled = ScaleVector_signed(zscore_input, pow(10,2));
+            // vector<uint32_t> zscores_shifted = ShiftVector(zscores_scaled, p);
+            
+            // auto max = max_element(zscores_shifted.begin(), zscores_scaled.end());
+            // uint32_t maxzscore = *max;
+            // uint32_t maxzsecret = nearestPowerOf2(maxzscore);
+            // uint32_t secretsize = nearestPowerOf2(bitInput.size());
             // uint32_t p = 32768;
             // uint32_t p = (maxsecret > maxzsecret) ? ((maxsecret > secretsize) ? maxsecret : secretsize) : ((maxzsecret > secretsize) ? maxzsecret : secretsize);
             cout << "P: " << p << endl;
@@ -390,7 +401,6 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             owner_p1.send(vectorsize);
             owner_p2.send(vectorsize);
             owner_p3.send(vectorsize);
-            cout << "vector size sent.\n";
             // Send the original input for verification
             // owner_p1.asyncSend(input);
             // owner_p2.asyncSend(input);
@@ -473,7 +483,12 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
                 {
                     ZZ_p z1 = random_ZZ_p();
                     ZZ_p z2 = random_ZZ_p();
-                    ZZ_p z3 = to_ZZ_p(zscores_scaled[i]) - z1 - z2;
+                    ZZ_p z3;
+                    if (zscores_scaled[i]<0)
+                        z3 = (conv<ZZ_p>(zscores_scaled[i]+p)) - z1 - z2;
+                    else
+                        z3 = conv<ZZ_p>(zscores_scaled[i]) - z1 - z2;
+                    // ZZ_p z3 = to_ZZ_p(zscores_shifted[i]) - z1 - z2;
                     uint32_t send_z1 = conv<uint32_t>(z1);
                     uint32_t send_z2 = conv<uint32_t>(z2);
                     uint32_t send_z3 = conv<uint32_t>(z3);
@@ -491,6 +506,48 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             
             cout << "Sent secret shared row values to parties.\n";
         }
+        vector<vector<uint32_t>> genoshares;
+        for (int i = 0; i < 3; i++) {
+            genoshares.push_back(vector<uint32_t>());
+        }
+        // sending geno shares
+        for (int i=0; i< geno_scaled.size(); i++)
+        {
+            for (int j=0; j< geno_scaled[0].size(); j++)
+            {
+                ZZ_p i1 = random_ZZ_p();
+                ZZ_p i2 = random_ZZ_p();
+                ZZ_p i3;
+                if (geno_scaled[i][j]<0)
+                    i3 = (conv<ZZ_p>(geno_scaled[i][j]+p)) - i1 - i2;
+                else
+                    i3 = conv<ZZ_p>(geno_scaled[i][j]) - i1 - i2;
+
+                uint32_t send_i1 = conv<uint32_t>(i1);
+                uint32_t send_i2 = conv<uint32_t>(i2);
+                uint32_t send_i3 = conv<uint32_t>(i3);
+                genoshares[0].push_back(send_i1);
+                genoshares[0].push_back(send_i2);
+                genoshares[1].push_back(send_i2);
+                genoshares[1].push_back(send_i3);
+                genoshares[2].push_back(send_i3);
+                genoshares[2].push_back(send_i1);
+            }
+        }
+        uint32_t testg_row = geno_scaled.size();
+        uint32_t testg_col = geno_scaled[0].size();
+        vector<uint32_t> genoshape = {
+            static_cast<uint32_t>(testg_row),
+            static_cast<uint32_t>(testg_col),
+        };
+
+        owner_p1.send(genoshape);
+        owner_p2.send(genoshape);
+        owner_p3.send(genoshape);
+        owner_p1.send(genoshares[0]);
+        owner_p2.send(genoshares[1]);
+        owner_p3.send(genoshares[2]);
+        cout << "Sent secret shared geno to parties.\n";
     }
 
     owner_p1.close();
@@ -544,7 +601,9 @@ void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toO
         vector<double> row_result;
         testmpc.ready();
         testmpc.receiveSecrets();
+        testmpc.receiveGeno();
         row_result=testmpc.genperm(row, numCol, norm_method);
+        testmpc.testMatrix();
         resultVectors.emplace_back(row_result);
         testmpc.clearVectors();
     }
@@ -625,32 +684,10 @@ void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vect
     }
     swap(finalVec, resultVectors1);
 }
-template <typename T>
-void writematrixToTSV(const vector<vector<T>>& data, int startrow, int endrow, const string& name)
-{
-    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + "_row" + std::to_string(startrow) + "_" + std::to_string(endrow) + ".tsv";
-    ofstream file(filename);
-    if (file.is_open())
-    {
-        for (int i = startrow; i <= endrow && i < data.size(); ++i)
-        {
-            for (const T& value : data[i])
-            {
-                file << value << "\t";
-            }
-            file << std::endl;
-        }
-        file.close();
-        cout << "Vector of vectors successfully written to TSV file." << endl;
-    }
-    else
-    {
-        cout << "Error opening the file." << endl;
-    }
-}
+
 double cal_accuracy(vector<vector<double>>& predicted, string& filename, int startrow, int endrow, int numCol)
 {
-   vector<vector<double>> actual = getMatrixFile(filename,startrow, endrow, numCol);
+    vector<vector<double>> actual = getMatrixFile(filename,startrow, endrow, numCol,true,true);
     // vector<double> actual = CSVtoVector(filename);
     // cout << string("actual matrix shape:" + to_string(actual.size())+ ","+to_string(actual[0].size())+"\n");
     // cout << string("predicted matrix shape:" + to_string(predicted.size())+ ","+to_string(predicted[0].size())+"\n");
@@ -724,9 +761,9 @@ int main(int argc, char* argv[])
     thread thread1([&]() {
         startMPCset(norm_method, openPorts, 0, address, lo_row, mid_row, samplecount, zscorefile, 0, resultVec1);
     });
-    thread thread2([&]() {
-        startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2);
-    });
+    // thread thread2([&]() {
+    //     startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2);
+    // });
     // thread thread3([&]() {
     //     startMPCset(openPorts, 24, address, 2, 3,samplecount,zscorefile, 0, resultVec3);
     // });
@@ -734,7 +771,7 @@ int main(int argc, char* argv[])
     //     startMPCset(openPorts, 36, address, 3, 4,samplecount,zscorefile, 0, resultVec4);
     // });
     threads.emplace_back(move(thread1));
-    threads.emplace_back(move(thread2));
+    // threads.emplace_back(move(thread2));
     // threads.emplace_back(move(thread3));
     // threads.emplace_back(move(thread4));
     for (auto& thread : threads) {

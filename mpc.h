@@ -68,7 +68,7 @@ public:
     void apply_perm_localM(bool participate, vector<vector<ZZ_p>> &v, vector<ZZ_p> &pi);
     void shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a);
     void unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b);
-    void testMatrix(vector<ZZ_p>& pi);
+    void testMatrix();
     void shuffleM(vector<ZZ_p> &pi, vector<vector<ZZ_p>> &a);
     void apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k);
     void compose(vector<ZZ_p> &sigma, vector<ZZ_p> &rho);
@@ -76,12 +76,19 @@ public:
     vector<double> genperm(int row, int numCol,string norm_method);
     void clearVectors() {
         shares.clear();
-        // identity.clear();
-        // zscores.clear();
+        for (auto &innerVec : geno) {
+        innerVec.clear(); 
+        }
+        for (auto &innerVec : permutMat) {
+        innerVec.clear(); 
+        }
+        geno.clear();
+        permutMat.clear();
     }
     void receivePheno();
     void logRatio();
-    vector<vector<ZZ_p>> matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p>>& mat2, int row1, int col1, int row2, int col2);
+    void receiveGeno();
+    vector<vector<ZZ_p>> matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p>>& mat2);
     void close();
 
 private:
@@ -89,6 +96,7 @@ private:
     map<int, PRNG *> seedpair;
     PRNG* localprng;
     vector<ZZ_p> shares;
+    vector<vector<ZZ_p>> permutMat;
     vector<ZZ_p> identity;
     vector<ZZ_p> zscores;
     vector<vector<ZZ_p>> geno;
