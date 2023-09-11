@@ -1,5 +1,6 @@
 #ifndef MPC_H
 #define MPC_H
+
 #include <cryptoTools/Common/BitVector.h>
 #include <cryptoTools/Crypto/PRNG.h>
 #include <cryptoTools/Network/IOService.h>
@@ -22,10 +23,33 @@
 #include <netinet/in.h>
 #include <cstring>
 
+
 using namespace osuCrypto;
 using namespace std;
 using namespace NTL;
+// namespace R = RmathNamespace;
+class Logger {
+public:
+    Logger(const std::string& filename) {
+        logFile.open(filename, std::ios::out | std::ios::trunc);
+    }
 
+    ~Logger() {
+        if (logFile.is_open()) {
+            logFile.close();
+        }
+    }
+
+    void log(const std::string& message) {
+        if (logFile.is_open()) {
+            std::time_t currentTime = std::time(nullptr);
+            logFile << message << std::endl;
+        }
+    }
+
+private:
+    std::ofstream logFile;
+};
 class mpc
 {
 
@@ -68,12 +92,12 @@ public:
     void apply_perm_localM(bool participate, vector<vector<ZZ_p>> &v, vector<ZZ_p> &pi);
     void shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a);
     void unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b);
-    void testMatrix();
+    void testMatrix(Logger& cislogger, Logger& nominalLogger);
     void shuffleM(vector<ZZ_p> &pi, vector<vector<ZZ_p>> &a);
     void apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k);
     void compose(vector<ZZ_p> &sigma, vector<ZZ_p> &rho);
     // vector<ZZ_p> get_shared_inverse(vector<ZZ_p> sigma);
-    vector<double> genperm(int row, int numCol,string norm_method);
+    void genperm(int row, int numCol, string norm_method, int permut);
     void clearVectors() {
         shares.clear();
         for (auto &innerVec : geno) {
@@ -155,21 +179,21 @@ void assert_equal(vector<T> one, vector<T> two, string tag)
         }
     }
 }
+// inline double variance(vector < double > & X, double mean) {
+//     double variance = 0.0;
+//     for (int x = 0 ; x < X.size() ; x++) variance += (X[x] - mean) * (X[x] - mean);
+//     variance /= (X.size() - 1);
+//     return variance;
+// }
 
-// vector<ZZ_p> convVec(vector<uint32_t> v){
-//     vector<ZZ_p> converted(v.size());
-//     for (int i=0; i<v.size(); i++)
-//     {
-//         converted[i] = conv<ZZ_p>(v[i]);
-//     }
-//     return converted;
+// inline double mean(vector < double > & X) {
+//     double mean = 0.0;
+//     for (int x = 0 ; x < X.size() ; x ++) mean += X[x];
+//     mean /= X.size();
+//     return mean;
 // }
-// vector<uint32_t> convVec(vector<ZZ_p> v){
-//     vector<uint32_t> converted(v.size());
-//     for (int i=0; i<v.size(); i++)
-//     {
-//         converted[i] = conv<uint32_t>(v[i]);
-//     }
-//     return converted;
-// }
+
+
+
+
 #endif

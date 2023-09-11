@@ -17,6 +17,7 @@ vector<uint32_t> convVec(vector<ZZ_p> v){
     }
     return converted;
 }
+
 template <typename T>
 void writematrixToTSV(const vector<vector<T>>& data, const string& name)
 {
@@ -153,8 +154,8 @@ bool mpc::setupSeeds()
 void mpc::ready()
 {
     bool empty = areVectorsEmpty();
-    if (empty)
-        cout << string(to_string(this->pid) + " ready to receive.\n");
+    // if (empty)
+        // cout << string(to_string(this->pid) + " ready to receive.\n");
     int ready = static_cast<int>(empty);
     this->toOwner.send(ready);
 }
@@ -174,13 +175,13 @@ void mpc::receiveSecrets()
         temp = convVec(result);
         // vector<ZZ_p> temp(result.begin(), result.end());
         swap(this->shares, temp);
-        cout <<"secrets received.\n";
+        // cout <<"secrets received.\n";
         bool prelim = this->identity.empty() && this->zscores.empty();
         int ready = static_cast<int>(prelim);
         this->toOwner.send(ready);
         if(prelim)
         {   
-            cout << string(to_string(this->pid) + " ready to receive identity and zscores.\n");
+            // cout << string(to_string(this->pid) + " ready to receive identity and zscores.\n");
             //receiving identity shares
             vector<uint32_t> identity_result;
             this->dataowner.recv(identity_result);
@@ -206,7 +207,7 @@ void mpc::receiveSecrets()
     }
     // cout <<this->pid <<endl;
     // print_vector(this->identity);
-    cout << string(to_string(this->pid) + " Secrets received.\n");
+    // cout << string(to_string(this->pid) + " Secrets received.\n");
 }
 
 // template class std::vector<ZZ_p>;
@@ -756,7 +757,7 @@ void mpc::shuffleM(vector<ZZ_p> &pi, vector<vector<ZZ_p>> &a)
         reshareM(a, 0);
     }
 }
-void mpc::testMatrix()
+void mpc::testMatrix(Logger& cislogger, Logger& nominalLogger)
 {
     vector<vector<double>> matpheno, matgeno;
     for (size_t i=0; i<this->permutMat.size(); i++)
@@ -767,10 +768,10 @@ void mpc::testMatrix()
         {
             int32_t unshifted;
             if (conv<uint32_t>(row[j]) > this->p/2)
-                unshifted = conv<uint32_t>(row[j]) - this->p;
+                unshifted = conv<int32_t>(row[j]) - this->p;
             else
                 unshifted = conv<int32_t>(row[j]);
-            unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,2));
+            unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,3));
         }
         matpheno.push_back(unscaledrow);
     }
@@ -782,40 +783,166 @@ void mpc::testMatrix()
         {
             int32_t unshifted;
             if (conv<uint32_t>(row[j]) > this->p/2)
-                unshifted = conv<uint32_t>(row[j]) - this->p;
+                unshifted = conv<int32_t>(row[j]) - this->p;
             else
                 unshifted = conv<int32_t>(row[j]);
-            unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,2));
+            unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,3));
         }
         matgeno.push_back(unscaledrow);
     }
-    cout << string("Final pheno size: "+to_string(matpheno.size())+", "+to_string(matpheno[0].size())+ 
-    "\nFinal geno size: "+ to_string(matgeno.size())+", "+to_string(matgeno[0].size())+"\n");
+    // cout << string("Final pheno size: "+to_string(matpheno.size())+", "+to_string(matpheno[0].size())+ 
+    // "\nFinal geno size: "+ to_string(matgeno.size())+", "+to_string(matgeno[0].size())+"\n");
     
     // vector<vector<ZZ_p>> matpheno = reveal(this->permutMat, false);
     // vector<vector<ZZ_p>> matgeno = reveal(this->geno, false);
+    auto start = chrono::high_resolution_clock::now();
     vector<vector<ZZ_p>> matmultresult = matmult(this->geno, this->permutMat);
-    vector<vector<double>> matcorr;
+    auto end = chrono::high_resolution_clock::now();
+    chrono::duration<double> totalduration = end - start;
+    double totaldurationInSeconds = totalduration.count();
+    double totaldurationInminutes = totaldurationInSeconds/60.0;
+    if (this->pid==0)     
+        cout << "Matmult execution time: " << totaldurationInminutes << " minutes" << endl;
+    vector<vector<double>> matcorr, r2_nominal;
+    // retrieving r_nominal and r2_nominal
     for (size_t i=0; i<matmultresult.size(); i++)
     {
         vector<ZZ_p> row = reveal(matmultresult[i], false);
-        vector<double> unscaledrow;
+        vector<double> unscaledrow, r2row;
         for (size_t j=0; j<row.size(); j++)
         {
             int32_t unshifted;
             if (conv<uint32_t>(row[j]) > this->p/2)
-                unshifted = conv<uint32_t>(row[j]) - this->p;
+                unshifted = conv<int32_t>(row[j]) - this->p;
             else
                 unshifted = conv<int32_t>(row[j]);
-            unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,4));
+            double r_nom = static_cast<double>(unshifted)/pow(10,6);
+            unscaledrow.push_back(r_nom);
+            r2row.push_back(r_nom*r_nom);
+
         }
         matcorr.push_back(unscaledrow);
+        r2_nominal.push_back(r2row);
     }
+    //calculating statistics
+    int dof = this->zscores.size()-2;
+
     if (this->pid ==0)
     {
-        writematrixToTSV(matpheno, "bloodpheno");
-        writematrixToTSV(matgeno, "bloodgeno");
-        writematrixToTSV(matcorr, "bloodcorr");
+        vector<double> std_ratio;
+        // writematrixToTSV(matpheno, "bloodpheno");
+        // writematrixToTSV(matgeno, "bloodgeno");
+        // writematrixToTSV(matcorr, "bloodcorr");
+        this->dataowner.recv(std_ratio);
+        int buffersize;
+        this->dataowner.recv(buffersize);
+        char buffer[buffersize];
+        this->dataowner.recv(buffer, buffersize);
+        string serializedVar(buffer, sizeof(buffer) - 1);
+        vector<string> cisVar;
+        istringstream iss(serializedVar);
+        string token;
+        while (getline(iss, token, ';')) {
+            cisVar.push_back(token);
+        }
+        // cout <<string("received number of cis variants: "+ to_string(cisVar.size()-1)+"\n");
+        // cout << string("\nreceived std_ratio first: "+to_string(std_ratio[0])+ ", 752: "+to_string(std_ratio[752])+"\n");
+        // cout <<string("received std ratio size: "+to_string(std_ratio.size())+"\n");
+        // cout << string("Matmult shape: "+to_string(matcorr.size())+","+to_string(matcorr[0].size())+"\n");
+        //Writing nominal pass
+        for (int v=0; v<cisVar.size()-1; v++)
+        {
+            string message = string(cisVar[0]+"\t"+cisVar[v+1]+"\t"+to_string(v)+"\t");
+            // logger.log(string(cisVar[0]+"\t"+cisVar[v]+"\t"+to_string(v)+"\t"));
+            double dof = this->permutMat[0].size()/2 - 2;
+            double slope = matcorr[v][0]*std_ratio[v];
+            double tstat2 = dof * r2_nominal[v][0] / (1- r2_nominal[v][0]);
+            double slope_se = abs(slope)/sqrt(tstat2);
+            double r2_nom = r2_nominal[v][0];
+            double r_nom = matcorr[v][0];
+            double pval = getPvalueFromTstat2(tstat2, dof);
+            message += string(to_string(dof)+"\t"+to_string(r_nom)+"\t"+to_string(r2_nom)+"\t"+to_string(sqrt(tstat2))+
+            "\t"+to_string(pval)+"\t"+to_string(slope)+"\t"+to_string(slope_se));
+            nominalLogger.log(message);
+        }
+        
+        vector<vector<double>> transposed(matcorr[0].size(), vector<double>(matcorr.size()));
+        for (size_t i = 0; i < matcorr.size(); ++i) {
+            for (size_t j = 0; j < matcorr[i].size(); ++j) {
+                transposed[j][i] = matcorr[i][j];
+            }
+        }
+        cout << string("transposed R2 matrix shape: " + to_string(transposed.size()) + ", "+to_string(transposed[0].size())+"\n");
+        // Getting r2_perm (maximum corr for each permutation)
+        vector<double> r_perm;
+        vector<size_t> idx; // holds the max values for corr and all permutations
+        int counter =0;
+        for (const auto& column : transposed) {
+           
+            auto max_it = std::max_element(column.begin(), column.end(),[](double a, double b) {
+                return abs(a) < abs(b);
+            });
+            size_t max_index = distance(column.begin(), max_it);
+            if(counter!=0)
+                r_perm.push_back(*max_it);
+            idx.push_back(max_index);
+            counter++;
+        }
+        //Compute mean and variance of p-values
+        vector < double > permPvalues;
+        double init_dof = this->permutMat[0].size()/2 - 2;
+        double mean = 0.0, variance = 0.0, beta_shape1 = 1.0, beta_shape2 = 1.0;
+        if (doublevariance(r_perm, doublemean(r_perm)) != 0.0) 
+        {
+            learnDF(r_perm, init_dof);
+            //LOG.println("  * Effective degree of freedom = " + sutils::double2str(true_df, 4));
+		}
+        for (int c = 0 ; c < r_perm.size() ; c ++) permPvalues.push_back(getPvalue(r_perm[c], init_dof)); //dof should be changed to true_dof
+        for (int pv = 0 ; pv < permPvalues.size() ; pv++) mean += permPvalues[pv];
+        mean /= permPvalues.size();
+        for (int pv = 0 ; pv < permPvalues.size() ; pv++) variance += (permPvalues[pv] - mean) * (permPvalues[pv] - mean);
+        variance /= (permPvalues.size() - 1);
+        //Estimate shape1 & shape2
+        if (cisVar.size()-1 > 1 && mean != 1.0) {
+            beta_shape1 = mean * (mean * (1 - mean ) / variance - 1);
+            beta_shape2 = beta_shape1 * (1 / mean - 1);
+            if (cisVar.size()-1 > 10) mleBeta(permPvalues, beta_shape1, beta_shape2);	//ML estimate if more than 10 variant in cis
+        }
+        // print_vector(r2_perm);
+        int ix = idx[0]; //index of highest variant for corr
+        double dof = init_dof;
+        double slope = matcorr[ix][0]*std_ratio[ix];
+        double tstat2 = dof * r2_nominal[ix][0] / (1- r2_nominal[ix][0]);
+        double slope_se = abs(slope)/sqrt(tstat2);
+        double r2_value = r2_nominal[ix][0];
+        double pval_nom = getPvalueFromTstat2(tstat2,dof);
+        double pval_true_df = getPvalueFromTstat2(tstat2, init_dof);
+        size_t count = count_if(r_perm.begin(), r_perm.end(), [r2_value](double value) {
+            return abs(value) >= abs(r2_value);
+        });
+        double pval_beta = pbeta(pval_true_df,beta_shape1, beta_shape2,1,0);
+        double pval_adj = static_cast<double>(count + 1) / (r_perm.size());
+        string cis_message = string(cisVar[0]+"\t"+cisVar[ix+1]+"\t"+to_string(ix)+"\t");
+        cis_message+= string(to_string(beta_shape1)+"\t"+to_string(beta_shape2)+"\t"+to_string(init_dof)+"\t"+to_string(pval_true_df)+"\t"+
+        to_string(matcorr[ix][0])+"\t"+to_string(r2_value)+"\t"+to_string(sqrt(tstat2))+"\t"+to_string(pval_nom)+"\t"+
+        to_string(slope)+"\t"+to_string(slope_se)+"\t"+to_string(pval_adj)+"\t"+to_string(pval_beta));
+        cislogger.log(cis_message);
+        cout << string("\n----------------------------\nGene: "+cisVar[0]+"\nVariant: "+cisVar[ix]+
+        "\nidx: "+to_string(ix)+
+        "\nstd_ratio: "+to_string(std_ratio[ix])+
+        "\ndof: "+to_string(dof)+"\nslope: "+to_string(slope)+"\ntstat: "+to_string(sqrt(tstat2))+"\nslope_se: "+to_string(slope_se)+
+        "\npval_perm: "+to_string(pval_adj)+"\nbeta_shape1: "+to_string(beta_shape1)+"\nbeta_shape2: "+to_string(beta_shape2)+"\npval_beta: "+to_string(pval_beta)+
+        +"\n----------------------------\n");
+        
+        vector<double> agg_stat;
+        agg_stat.push_back(static_cast<double>(ix));
+        agg_stat.push_back(slope);
+        agg_stat.push_back(sqrt(tstat2));
+        agg_stat.push_back(slope_se);
+        agg_stat.push_back(pval_adj);
+        this->toOwner.send(agg_stat);
+        // cout <<string("everything so far complete.\n");
+        
     }
     
     // vector<ZZ_p> revealp = reveal(this->pheno);
@@ -904,11 +1031,13 @@ void writeVectorToCSV(const std::vector<T>& data, int pid, int row, string name)
     }
 }
 
-vector<double> mpc::genperm(int row, int numCol, string norm_method)
+void mpc::genperm(int row, int numCol, string norm_method, int permut)
 {
+    auto sort_start = chrono::high_resolution_clock::now();
     vector<ZZ_p> k_i(2*this->n);
     k_i.assign(this->shares.begin(), this->shares.begin() + 2*this->n);
-    cout <<"assigned" <<endl;
+    // if (this->pid == 0)
+    //     cout <<"assigned" <<endl;
     vector<ZZ_p> inv_rho, inv_cdf;
     inv_rho.assign(this->identity.begin(), this->identity.end());
     inv_cdf.assign(this->zscores.begin(), this->zscores.end());
@@ -925,12 +1054,19 @@ vector<double> mpc::genperm(int row, int numCol, string norm_method)
             compose(prev_sigma, rho);
             swap(sigma,rho);    
         }
-        cout << "loop finished.\n";
-        vector<ZZ_p> reconstructed = reveal(sigma, false); 
+        // if (this->pid == 0)
+        //     cout << "loop finished.\n";
+        // vector<ZZ_p> reconstructed = reveal(sigma, false); 
         apply_shared_perm(sigma, inv_rho);
         apply_shared_perm(inv_rho, inv_cdf);
+        auto sort_end = chrono::high_resolution_clock::now();
+        chrono::duration<double> sortduration = sort_end - sort_start;
+        double totaldurationInSeconds = sortduration.count();
+        double totaldurationInminutes = totaldurationInSeconds/60.0;
+        if (this->pid == 0)
+            cout << string("sorting execution time: "+to_string(totaldurationInminutes) +" minutes.\n");
         this->permutMat.push_back(inv_cdf);
-        for (size_t i=0; i<5; i++)
+        for (size_t i=0; i<permut; i++)
         {
             vector<ZZ_p> permuted(inv_cdf);
             vector<ZZ_p> pi=Frand(inv_cdf.size()/2);
@@ -938,32 +1074,32 @@ vector<double> mpc::genperm(int row, int numCol, string norm_method)
             this->permutMat.push_back(permuted);
         }
         // cout << string("permutation matrix size: "+to_string(this->permutMat.size())+", "+to_string(this->permutMat[0].size())+"\n");
-        vector<ZZ_p> zscores_result = reveal(inv_cdf, false); // check if this changes after running multiple times TODO
-        vector<uint32_t> zscores_uint = convVec(zscores_result);
-        vector<int32_t> zscores_unshifted = UnshiftVector(zscores_uint,this->p);
-        vector<double> zscores_unscaled = UnscaleVector_signed(zscores_unshifted, pow(10,2));
-        string zscore_filename;
-        if (norm_method == "qn")
-        {
-            zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/qn.tsv";
-        }
-        else if (norm_method == "deseq2")
-        {
-            zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/deseq2.tsv";
-        }
-        else 
-        {
-            throw invalid_argument("either QN or deseq2 normalization please.");
-        }
-        // string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/toyQN.tsv";
-        double accuracy = cal_accuracy(zscores_unscaled, zscore_filename, row, numCol);
-        if (this->pid == 0)
-        {
-            cout << string("row: " + to_string(row) + "/ pid" + to_string(this->pid) + ": " + to_string(accuracy)) << endl;
-            // writeVectorToCSV(zscores_double, this->pid, row, "0726");
-        }
+        // vector<ZZ_p> zscores_result = reveal(inv_cdf, false); // check if this changes after running multiple times TODO
+        // vector<uint32_t> zscores_uint = convVec(zscores_result);
+        // vector<int32_t> zscores_unshifted = UnshiftVector(zscores_uint,this->p);
+        // vector<double> zscores_unscaled = UnscaleVector_signed(zscores_unshifted, pow(10,2));
+        // string zscore_filename;
+        // if (norm_method == "qn")
+        // {
+        //     zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/qn.tsv";
+        // }
+        // else if (norm_method == "deseq2")
+        // {
+        //     zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/deseq2.tsv";
+        // }
+        // else 
+        // {
+        //     throw invalid_argument("either QN or deseq2 normalization please.");
+        // }
+        // // string zscore_filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/toyQN.tsv";
+        // double accuracy = cal_accuracy(zscores_unscaled, zscore_filename, row, numCol);
+        // if (this->pid == 0)
+        // {
+        //     cout << string("row: " + to_string(row) + "/ pid" + to_string(this->pid) + ": " + to_string(accuracy)) << endl;
+        //     // writeVectorToCSV(zscores_double, this->pid, row, "0726");
+        // }
             
-        return zscores_unscaled;
+        // return zscores_unscaled;
         // if (pid == 0) {
         //     print_vector(reconstructed);
         //     // print_vector(this->originalData);
@@ -998,30 +1134,9 @@ vector<double> mpc::genperm(int row, int numCol, string norm_method)
 }
 void mpc::receivePheno()
 {
-    // uint32_t p;
-    
     vector<uint32_t> mat2;
     this->dataowner.recv(this->shape);
-    // this->dataowner.recv(mat1);
     this->dataowner.recv(mat2);
-    // print_vector(this->shape);
-    // cout << mat1.size() <<endl;
-    // cout << mat2.size() << endl;
-    // for (int i=0; i<this->shape[0]; i++)
-    // {
-    //     vector<ZZ_p> row;
-    //     for (int j=0; j<this->shape[1]; j++)
-    //     {
-    //         // cout << string(to_string(i)+ " " + to_string(j)+"\n");
-    //         // cout << mat1[2*i*shape[1]+2*j] << endl;
-    //         // cout << mat1[2*i*shape[1]+2*j+1] << endl;
-    //         row.push_back(to_ZZ_p(mat1[2*i*shape[1]+2*j]));
-    //         row.push_back(to_ZZ_p(mat1[2*i*shape[1]+2*j+1]));
-    //         // this->geno[i][2*j]=mat1[2*i*shape[1]+2*j];
-    //         // this->geno[i][2*j+1]=mat1[2*i*shape[1]+2*j+1];
-    //     }
-    //     this->geno.push_back(row);
-    // }
     for (int j=0; j<this->shape[0]; j++)
     {
         vector<ZZ_p> row;
@@ -1029,24 +1144,9 @@ void mpc::receivePheno()
         {
             row.push_back(to_ZZ_p(mat2[2*j*this->shape[1]+2*k]));
             row.push_back(to_ZZ_p(mat2[2*j*this->shape[1]+2*k+1]));
-            // this->pheno[j][2*k]=mat2[2*j*shape[3]+2*k];
-            // this->pheno[j][2*k+1]=mat2[2*j*shape[3]+2*k+1];
         }
         this->pheno.push_back(row);
     }
-    // print_vector(this->pheno);
-    // vector<ZZ_p> temp(mat2.begin(), mat2.end());
-    // vector<ZZ_p> recoveredp = reveal(temp,false);
-    // print_vector(recoveredp);
-    // vector<vector<ZZ_p>> multmat = matmult(this->geno, this->pheno, this->shape[0], this->shape[1], this->shape[2], this->shape[3]);
-    // for (int i=0; i<multmat.size(); i++)
-    // {
-    //     vector<ZZ_p> recoveredg = reveal(multmat[i], false);
-    //     if (this->pid==0)
-    //         print_vector(recoveredg);
-    // }
-    // vector<ZZ_p> recoveredg = reveal(multmat, false);
-    // print_vector(recoveredg);
 }
 vector<vector<ZZ_p>> transpose(vector<vector<ZZ_p>>& matrix) {
     int rows = matrix.size();
@@ -1116,7 +1216,6 @@ void mpc::receiveGeno()
     this->dataowner.recv(genoshape);
     // this->shape.push_back(genoshape);
     this->dataowner.recv(mat1);
-    cout << string("this->shape size: "+to_string(this->shape.size())+"\n");
     // for (int i=0; i<this->shape[0]; i++)
     // {
     //     vector<ZZ_p> row;
@@ -1142,7 +1241,6 @@ void mpc::receiveGeno()
         }
         this->geno.push_back(row);
     }
-    cout << string("----RECEIVED GENOSHAPE: "+ to_string(this->geno.size())+", "+to_string(this->geno[0].size())+"\n");
     // print_vector(this->pheno);
     // vector<ZZ_p> temp(mat2.begin(), mat2.end());
     // vector<ZZ_p> recoveredp = reveal(temp,false);
@@ -1163,6 +1261,10 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
         throw logic_error("mat1 column size and mat2 row size do not match.");
     vector<vector<ZZ_p>> result(mat1.size(), vector<ZZ_p>(mat2.size()));
     vector<vector<ZZ_p>> transposed = transpose(mat2);
+    auto minus_it = this->seedpair.find((this->pid + 2) % 3);
+    auto plus_it = this->seedpair.find((this->pid + 1) % 3);
+    PRNG &minus_PRNG = *(minus_it->second);
+    PRNG &plus_PRNG = *(plus_it->second);
     for (int i = 0; i < mat1.size(); ++i) 
     { // row index
         for (int j = 0; j < mat2.size(); ++j) 
@@ -1183,6 +1285,8 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
             {
                 sum += vec1[2*k]*vec2[2*k]+vec1[2*k+1]*vec2[2*k]+vec1[2*k]*vec2[2*k+1];
             }
+            sum+=to_ZZ_p(minus_PRNG.get<uint32_t>()); // result + r1 - r2;
+            sum-=to_ZZ_p(plus_PRNG.get<uint32_t>()); 
             result[i][j] = sum;
             // cout << string("row"+to_string(i)+" col"+to_string(j)+" :"+to_string(conv<int>(sum)))<<endl;
             // vector<ZZ_p> revec1 = reveal(vec1,false);
@@ -1200,7 +1304,7 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
         vector<uint32_t> result2;
         this->fromPlus.recv(result2);
         if (result1.size() != result2.size())
-            throw runtime_error("matmul result shares are not the same size.");
+            throw runtime_error("matmult result shares are not the same size.");
         for (int cidx=0; cidx<result[0].size(); cidx++)
         {
             finalresult[ridx][2*cidx] = to_ZZ_p(result1[cidx]);
@@ -1222,19 +1326,18 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
     //     finalresult[i*2+1] = conv<ZZ_p>(result2[i]);
     // }
     // print_vector(finalresult);
-    cout << string("Final matmult result shape: "+to_string(finalresult.size())+", "+to_string(finalresult[0].size())+"\n");
+    // if (this->pid ==0)
+    //     cout << string("Final matmult result shape: "+to_string(finalresult.size())+", "+to_string(finalresult[0].size())+"\n");
     return finalresult;
 }
 void mpc::close()
 {
-    // clearVectors();
-    cout << "Closing channels.\n";
     // std::lock_guard<std::mutex> lock(mtx);
     this->dataowner.close();
     this->fromPlus.close();
     this->fromMinus.close();
     this->toPlus.close();
     this->toMinus.close();
-    // this->ios.stop();
-    cout << "channels closed.\n";
+    if (this->pid == 0)
+        cout << "channels closed.\n";
 }

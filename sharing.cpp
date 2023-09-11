@@ -4,6 +4,8 @@
 #include "utils.h"
 #include <chrono>
 #include "input.h"
+#include <sys/resource.h>
+struct rusage r_usage;
 
 void bitdecompose(vector<uint32_t> &secrets, vector<BitVector> &bitInput)
 {
@@ -13,6 +15,47 @@ void bitdecompose(vector<uint32_t> &secrets, vector<BitVector> &bitInput)
         string sinput = bitset<32>(secrets[i]).to_string();
         BitVector decomposed(sinput);
         bitInput.push_back(decomposed);
+    }
+}
+double calculateVariance(const vector<double>& values) {
+    double sum = 0.0;
+    double mean = 0.0;
+    size_t n = values.size();
+
+    // Calculate the mean
+    for (const double& value : values) {
+        sum += value;
+    }
+    mean = sum / n;
+
+    // Calculate the sum of squared differences
+    double sumSquaredDiff = 0.0;
+    for (const double& value : values) {
+        double diff = value - mean;
+        sumSquaredDiff += diff * diff;
+    }
+
+    // Calculate the variance
+    double variance = sumSquaredDiff / n;
+    return variance;
+}
+template <typename T>
+void writeVectorToCSV(const vector<T>& data, string name)
+{
+    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + ".csv";
+    ofstream file(filename);
+    if (file.is_open())
+    {
+        for (const T& value : data)
+        {
+            file << value << ",";
+        }
+        file.close();
+        cout << string(name+ " vector successfully written to CSV file.") << endl;
+    }
+    else
+    {
+        cout << "Error opening the file." << endl;
     }
 }
 template <typename T>
@@ -31,7 +74,7 @@ void writematrixToTSV(const vector<vector<T>>& data, int startrow, int endrow, c
             file << std::endl;
         }
         file.close();
-        cout << "Vector of vectors successfully written to TSV file." << endl;
+        cout << string(name+" matrix successfully written to TSV file.") << endl;
     }
     else
     {
@@ -168,8 +211,40 @@ double findMedian(const vector<vector<double>>& matrix, size_t col) {
         return columnData[size / 2];
     }
 }
+vector<double> center_normalize(vector<vector<double>>& M) {
+    int rows = M.size();
+    int cols = M[0].size();
 
-void dataclient(string norm_method, int sendport1, int recvport1, string address1, int sendport2, int recvport2, string address2, int sendport3, int recvport3, string address3,int rowstart, int rowend,int numCol, string zscorefile)
+    // Compute the mean and variance for each row
+    vector<vector<double>> N(rows, vector<double>(cols, 0.0));
+    vector<double> row_variances(rows, 0.0);
+    for (int i = 0; i < rows; ++i) {
+        // Calculate row mean
+        double row_mean = 0.0;
+        for (int j = 0; j < cols; ++j) {
+            row_mean += M[i][j];
+        }
+        row_mean /= cols;
+
+        // Center and normalize the row, and calculate variance
+        for (int j = 0; j < cols; ++j) {
+            N[i][j] = M[i][j] - row_mean;
+            row_variances[i] += N[i][j] * N[i][j];
+        }
+    }
+
+    // Normalize each row by its variance
+    for (int i = 0; i < rows; ++i) {
+        double norm = sqrt(row_variances[i]);
+        for (int j = 0; j < cols; ++j) {
+            N[i][j] /= norm;
+        }
+        row_variances[i] /= (cols-1); // Not the same
+    }
+    swap(N, M);
+    return row_variances;
+}
+void dataclient(string norm_method, int sendport1, int recvport1, string address1, int sendport2, int recvport2, string address2, int sendport3, int recvport3, string address3,int rowstart, int rowend,int numCol, string zscorefile, int permut)
 {
     IOService ios;
     Endpoint epsend1(ios, address1, sendport1, EpMode::Server);
@@ -329,8 +404,23 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
     double durationInminutes = durationInSeconds/60.0;
     cout << "Normalization Execution time: " << durationInminutes << " minutes" << endl;
     vector<vector<int32_t>> geno_scaled;
+    vector<double> geno_var, pheno_var;
+    
+    
+    string pheno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/bed_template.tsv";
+    string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_centered.tsv";
+    string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variantdf.tsv";
+    auto loadgeno = chrono::high_resolution_clock::now();
+    // prepareInput testinput(pheno_pos, geno_matrix,geno_pos,1000000);
+    auto loadend = chrono::high_resolution_clock::now();
+    duration = loadend - loadgeno;
+    durationInSeconds = duration.count();
+    durationInminutes = durationInSeconds/60.0;
+    cout << "Loading Genotype matrix: " << durationInminutes << " minutes" << endl;
     for (int r=rowstart; r<rowend; r++)
     {
+        vector<string> cisVariants;
+        vector<double> std_ratio;
         int ready1, ready2, ready3;
         p1_owner.recv(ready1);
         p2_owner.recv(ready2);
@@ -348,28 +438,38 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             // vector<double> input = pheno[r][:numCol];
             
             // cout << string("gene "+ geneID[r]+"\n");
-            string pheno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/bed_template.tsv";
-            string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_centered.tsv";
-            string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variantdf.tsv";
+            // writematrixToTSV(pheno,0,pheno.size(),string("normpheno_"+norm_method));
+            // string pheno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/bed_template.tsv";
+            // string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_centered.tsv";
+            // string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variantdf.tsv";
             // prepareInput testinput(pheno_pos, geno_matrix,geno_pos,1000000);
-            // vector<uint32_t> range;
+            vector<uint32_t> range;
+            
             // string chromosome = testinput.getCisRange(geneID[r],range);
             // cout << string("gene "+geneID[r]+"/chr "+ chromosome+ "/start "+ to_string(range[0])+"/end "+ to_string(range[1])+"\n");
-            // vector<vector<double>> slicedgeno = testinput.sliceGeno(range, chromosome, -1);
+            // vector<vector<double>> slicedgeno = testinput.sliceGeno(range, chromosome, -1,cisVariants);
             // cout << string("genotype shape: "+ to_string(slicedgeno.size())+"/ "+to_string(slicedgeno[0].size())+"\n");
-            // geno_scaled = ScaleVector(slicedgeno, pow(10,2));
-
+            // writeVectorToCSV(cisVariants, string("row_"+to_string(r)+"_gene_"+geneID[r]+"_cisVariants"));
             // writematrixToTSV(slicedgeno, 0,slicedgeno.size(), "genoscaled");
-            string genofile = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/genoscaled_row0_1361.tsv";
-            vector<vector<double>> slicedgeno = getMatrixFile(genofile, 0, 1362,numCol,false,false);
-            geno_scaled = ScaleVector(slicedgeno, pow(10,2));
-            // vector<vector<uint32_t>> geno_shifted = ShiftVector(geno_scaled, p);
-            // for (int i=0; i<5; i++)
-            // {
-            //     cout <<string("index: "+to_string(i)+"\t>>"+to_string(geno_shifted[i][0])+", "+to_string(geno_shifted[i][1])+", "+
-            //     to_string(geno_shifted[i][2])+", "+to_string(geno_shifted[i][3])+", "+to_string(geno_shifted[i][4])+"\n");
-
-            // }
+            string genofile = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/genoscaled_row0_1861.tsv";
+            string cisVarfile = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/row_3_gene_ENSG00000268903.1_cisVariants.csv";
+            vector<vector<double>> slicedgeno = getMatrixFile(genofile, 0, 1862,numCol,false,false);
+            ifstream file(cisVarfile);
+            string line;
+            if (getline(file, line)) {
+                istringstream ss(line);
+                string value;
+                while (getline(ss, value, ',')) {
+                    cisVariants.push_back(value);
+                }
+            }
+            file.close();
+            cout <<string("read in cisVar size:" + to_string(cisVariants.size())+"\n");
+            geno_var = center_normalize(slicedgeno);
+            writeVectorToCSV(geno_var, string("row"+to_string(r)+"_geno_var"));
+            // cout << string("first geno var: "+to_string(geno_var[0])+"\n");
+            geno_scaled = ScaleVector(slicedgeno, pow(10,3));
+            
             vector<double> input(pheno[r].begin(), pheno[r].begin() + numCol);
             vector<uint32_t> secrets = ScaleVector(input, pow(10,3)); // integer version of secret
             auto smax = max_element(secrets.begin(), secrets.end());
@@ -380,20 +480,26 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             
             /// ZSCORE FILE
             string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/"+zscorefile+".txt");
-            // string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/" + zscorefile + ".txt");
+            string original = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/zscores.txt");
             vector<double> zscore_input = CSVtoVector(zscore_filename);
+            vector<double> pre_centered = CSVtoVector(original);
+            cout << "phenotype variance: " << doublevariance(pre_centered, doublemean(pre_centered)) << endl;
+            double pheno_var =doublevariance(pre_centered, doublemean(pre_centered));//0.9782648500530864;// 0.9596748533543238; //TODO::Don't put manual numbers here 
+            // double geno_var1 = calculateVariance(slicedgeno[0]);
+            //pre-calculate std_ratio TODO: for real life implementation, genotype variance must be calculated in a secure way
+            
+
+            for (size_t j = 0; j < geno_var.size(); ++j) {
+                std_ratio.push_back(sqrt(pheno_var / geno_var[j]));
+            }
+            cout << string("\tSLICED GENO shape: "+to_string(slicedgeno.size())+","+to_string(slicedgeno[0].size())+"\n");
+            cout << string("\tSTDRATIO calculated with shape: "+to_string(std_ratio.size())+"\n");
+            cout << string("\tGENO_VAR shape: "+to_string(geno_var.size())+"\n");
             auto min = min_element(zscore_input.begin(), zscore_input.end());
             double shiftsize = abs(*min);
             // cout << "shift size: " << shiftsize << endl;
-            vector<int32_t> zscores_scaled = ScaleVector_signed(zscore_input, pow(10,2));
-            // vector<uint32_t> zscores_shifted = ShiftVector(zscores_scaled, p);
+            vector<int32_t> zscores_scaled = ScaleVector_signed(zscore_input, pow(10,3));
             
-            // auto max = max_element(zscores_shifted.begin(), zscores_scaled.end());
-            // uint32_t maxzscore = *max;
-            // uint32_t maxzsecret = nearestPowerOf2(maxzscore);
-            // uint32_t secretsize = nearestPowerOf2(bitInput.size());
-            // uint32_t p = 32768;
-            // uint32_t p = (maxsecret > maxzsecret) ? ((maxsecret > secretsize) ? maxsecret : secretsize) : ((maxzsecret > secretsize) ? maxzsecret : secretsize);
             cout << "P: " << p << endl;
             // ZZ_p::init(to_ZZ(p)); 
             uint32_t inv = PowerMod(3, -1, p);
@@ -504,6 +610,7 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
                 owner_p3.send(zscore_shares[2]);
             }
             
+            // cout << "Secrets shared " << std::time(nullptr) << endl;
             cout << "Sent secret shared row values to parties.\n";
         }
         vector<vector<uint32_t>> genoshares;
@@ -547,7 +654,31 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         owner_p1.send(genoshares[0]);
         owner_p2.send(genoshares[1]);
         owner_p3.send(genoshares[2]);
+
+        // sending std_ratio in plaintext to party 1
+        owner_p1.send(std_ratio);
+        string serializedvariants=string(geneID[r]+";");
+        for (const std::string& str : cisVariants) {
+            serializedvariants += str + ";"; // Use a suitable delimiter
+        }
+        int estimatedSize = static_cast<int>(serializedvariants.size());
+        // int safetyMargin = 128; // Adjust this based on your needs
+        int bufferSize = estimatedSize;
+        // Send the serialized data over the channel
+        owner_p1.send(bufferSize);
+        owner_p1.send(serializedvariants.data(), serializedvariants.size());
+        // cout << "Geno shared " << std::time(nullptr) << endl;
         cout << "Sent secret shared geno to parties.\n";
+        vector<double> agg_stat;
+        p1_owner.recv(agg_stat);
+        // cout << "Agg stat received " << std::time(nullptr) << endl;
+        // cout << string("\n----------------------------\nROW "+to_string(r)+", gene "+geneID[r]+
+        // "\nMost significant variant: "+cisVariants[agg_stat[0]]+
+        // "\nidx: "+to_string(static_cast<int>(agg_stat[0]))+
+        // "\nslope: "+to_string(agg_stat[1])+
+        // "\ntstat: "+to_string(agg_stat[2])+
+        // "\nslope_se: "+to_string(agg_stat[3])+
+        // "\npval_perm: +"+to_string(agg_stat[4])+"\n----------------------------\n");
     }
 
     owner_p1.close();
@@ -574,15 +705,8 @@ vector<ZZ_p> convert(vector<int> input)
     }
     return output;
 }
-void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toOwnerPort,  string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2,int rowstart, int rowend, int numCol, vector<vector<double>>& resultVector) //, atomic<int>& readyCounter, mutex& mtx, condition_variable& cv)
-{
-    // string to_print = "runMPC: ownerPort: " + to_string(ownerPort);
-    // to_print.append(" pid " + to_string(pid));
-    // to_print.append(" recPort1 " + to_string(recPort1));
-    // to_print.append(" recPort2 " + to_string(recPort2));
-    // to_print.append("\n");
-    // cout << to_print;
-    // mpc testmpc(readyCounter, mtx, cv);
+void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toOwnerPort,  string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2,int rowstart, int rowend, int numCol, vector<vector<double>>& resultVector, int permut, Logger& cisLogger, Logger& nominalLogger) //, atomic<int>& readyCounter, mutex& mtx, condition_variable& cv)
+{    
     mpc testmpc;
     // std::promise<void> promise;
     // std::future<void> future = promise.get_future();
@@ -599,11 +723,17 @@ void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toO
     {
         // cout << string("pid"+to_string(pid)+"_row"+to_string(row)+"\n");
         vector<double> row_result;
+        // cout << "start: " << std::time(nullptr) << endl;
         testmpc.ready();
+        // cout << "ready: " << std::time(nullptr) << endl;
         testmpc.receiveSecrets();
+        // cout << "receiveSecrets: " << std::time(nullptr) << endl;
         testmpc.receiveGeno();
-        row_result=testmpc.genperm(row, numCol, norm_method);
-        testmpc.testMatrix();
+        // cout << "receiveGeno: " << std::time(nullptr) << endl;
+        testmpc.genperm(row, numCol, norm_method, permut);
+        // cout << "genperm: " << std::time(nullptr) << endl;
+        testmpc.testMatrix(cisLogger, nominalLogger);
+        // cout << "testMatrix: " << std::time(nullptr) << endl;
         resultVectors.emplace_back(row_result);
         testmpc.clearVectors();
     }
@@ -611,7 +741,8 @@ void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toO
     chrono::duration<double> duration = invcdf_end - invcdf_start;
     double durationInSeconds = duration.count();
     double durationInminutes = durationInSeconds/60.0;
-    cout << string("pid "+to_string(pid)+" inverseCDF Execution time: " + to_string(durationInminutes) + " minutes\n") << endl;
+    // if (pid == 0)
+    //     cout << string("InverseCDF Execution time: " + to_string(durationInminutes) + " minutes\n") << endl;
     testmpc.close();
     swap(resultVector, resultVectors);
 }
@@ -644,37 +775,37 @@ bool isPortOpen(int port) {
     close(sockfd);
     return true;
 }
-void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vector<string>& address, int startrow, int endrow, int numCol, string zscorefile, int CPU_core, vector<vector<double>>& finalVec)
+void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vector<string>& address, int startrow, int endrow, int numCol, string zscorefile, int CPU_core, vector<vector<double>>& finalVec, int permut, Logger& cislogger, Logger& nominalLogger)
 {
     // cout << "startMpcset Start\n";
     vector<thread> threads;
     vector<vector<double>> resultVectors1,resultVectors2,resultVectors3;
     thread dataClientThread(dataclient, norm_method, availPorts[startidx + 6], availPorts[startidx + 9], address[1], availPorts[startidx + 7], availPorts[startidx + 10], address[2], 
-    availPorts[startidx + 8], availPorts[startidx + 11], address[3], startrow, endrow, numCol, zscorefile);
+    availPorts[startidx + 8], availPorts[startidx + 11], address[3], startrow, endrow, numCol, zscorefile, permut);
     setThreadAffinity(dataClientThread,CPU_core+0);
     threads.emplace_back(move(dataClientThread));
 
     // int startidx1 = startidx;
-    thread runMPC1([=, &resultVectors1]() {
+    thread runMPC1([=, &resultVectors1, &cislogger, &nominalLogger]() {
         runMPC(norm_method, 0, address[0], availPorts[startidx + 6], availPorts[startidx + 9], address[2], availPorts[startidx + 0], availPorts[startidx + 2], address[3], availPorts[startidx + 1], availPorts[startidx + 4], 
-        startrow, endrow, numCol, resultVectors1);
+        startrow, endrow, numCol, resultVectors1,permut,cislogger,nominalLogger);
     });
     // thread runMPC1(runMPC, 0, address[0], availPorts[startidx + 6], availPorts[startidx + 9], address[2], availPorts[startidx + 0], availPorts[startidx + 2], address[3], availPorts[startidx + 1], availPorts[startidx + 4], startrow, endrow, resultVectors1);
     setThreadAffinity(runMPC1,CPU_core+1);
     threads.emplace_back(move(runMPC1));
 
     // // int startidx2 = startidx;
-    thread runMPC2([=, &resultVectors2]() {
+    thread runMPC2([=, &resultVectors2, &cislogger,&nominalLogger]() {
         runMPC(norm_method, 1, address[0], availPorts[startidx + 7], availPorts[startidx + 10], address[3], availPorts[startidx + 3], availPorts[startidx + 5], address[1], availPorts[startidx + 2], availPorts[startidx + 0], 
-        startrow, endrow,numCol,resultVectors2);
+        startrow, endrow,numCol,resultVectors2,permut,cislogger,nominalLogger);
     });
     // thread runMPC2(runMPC, 1, address[0], availPorts[startidx + 7], availPorts[startidx + 10], address[3], availPorts[startidx + 3], availPorts[startidx + 5], address[1], availPorts[startidx + 2], availPorts[startidx + 0], startrow, endrow, resultVectors2);
     setThreadAffinity(runMPC2,CPU_core+2);
     threads.emplace_back(move(runMPC2));
 
-    thread runMPC3([=, &resultVectors3]() {
+    thread runMPC3([=, &resultVectors3, &cislogger,&nominalLogger]() {
         runMPC(norm_method, 2, address[0], availPorts[startidx + 8], availPorts[startidx + 11], address[1], availPorts[startidx + 4], availPorts[startidx + 1], address[2], availPorts[startidx + 5], availPorts[startidx + 3], 
-        startrow, endrow, numCol,resultVectors3);
+        startrow, endrow, numCol,resultVectors3,permut,cislogger,nominalLogger);
     });
     // thread runMPC3(runMPC, 2, address[0], availPorts[startidx + 8], availPorts[startidx + 11], address[1], availPorts[startidx + 4], availPorts[startidx + 1], address[2], availPorts[startidx + 5], availPorts[startidx + 3], startrow, endrow, resultVectors3);
     setThreadAffinity(runMPC3,CPU_core+2);
@@ -726,19 +857,20 @@ int main(int argc, char* argv[])
 {
     if (argc < 5)
     {
-        cout << "Please provide at least four arg: low, mid, high, samplecount, zscorefile.\n";
+        cout << "Please provide at least four arg: low, mid, high, samplecount, permutation, zscorefile name, norm method.\n";
         return 1;
     }
     int lo_row = stoi(argv[1]);
     int mid_row = stoi(argv[2]);
     int hi_row = stoi(argv[3]);
     int samplecount = stoi(argv[4]);
-    string zscorefile = argv[5];
-    string norm_method = argv[6];
+    int permut = stoi(argv[5]);
+    string zscorefile = argv[6];
+    string norm_method = argv[7];
     int startingPort = 12300;
     int assignedPorts=0;
     vector<int> openPorts;
-    while (assignedPorts < 24)
+    while (assignedPorts < 12)
     {
         int port = startingPort;
         if(isPortOpen(port))
@@ -752,17 +884,23 @@ int main(int argc, char* argv[])
     vector<string> address{"localhost","localhost","localhost","localhost"};
 
     auto start = chrono::high_resolution_clock::now();
+    // cout << "Start time: " << std::time(nullptr) << endl;
     int numCores = thread::hardware_concurrency();
     // mutex mtx;
     // condition_variable cv;
     // std::atomic<int> readyCounter(0);
     vector<thread> threads;
     vector<vector<double>> resultVec1,resultVec2,resultVec3,resultVec4;
+    string nominal = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/nominal_output.tsv");
+    string cis = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/cis_output.tsv");
+    Logger nominallogger(nominal), cislogger(cis);
+    nominallogger.log(string("phenID\tvarID\tvarIdx\tdof\tr_nom\tr2_nom\ttstat\tpval\tslope\tslope_se"));
+    cislogger.log(string("phenID\tvarID\tvarIdx\tbeta_shape1\tbeta_shape2\ttrue_dof\tpval_true_df\tr_nom\tr2_nom\ttstat\tpval_nominal\tslope\tslope_se\tpval_perm\tpval_beta"));
     thread thread1([&]() {
-        startMPCset(norm_method, openPorts, 0, address, lo_row, mid_row, samplecount, zscorefile, 0, resultVec1);
+        startMPCset(norm_method, openPorts, 0, address, lo_row, mid_row, samplecount, zscorefile, 0, resultVec1,permut,cislogger,nominallogger);
     });
     // thread thread2([&]() {
-    //     startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2);
+    //     startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2,permut,cislogger,nominallogger);
     // });
     // thread thread3([&]() {
     //     startMPCset(openPorts, 24, address, 2, 3,samplecount,zscorefile, 0, resultVec3);
@@ -793,13 +931,18 @@ int main(int argc, char* argv[])
     {
         throw invalid_argument("either QN or deseq2 normalization please.");
     }
-    double accuracy = cal_accuracy(resultVec1, actual_filename, lo_row, hi_row, samplecount);
-    cout << string("row "+to_string(lo_row)+" to "+to_string(hi_row)+" accuracy: "+ to_string(accuracy)+"\n");
-    writematrixToTSV(resultVec1,lo_row,hi_row,"0728");
+    // double accuracy = cal_accuracy(resultVec1, actual_filename, lo_row, hi_row, samplecount);
+    // cout << string("row "+to_string(lo_row)+" to "+to_string(hi_row)+" accuracy: "+ to_string(accuracy)+"\n");
+    // writematrixToTSV(resultVec1,lo_row,hi_row,"0728");
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> totalduration = end - start;
     double totaldurationInSeconds = totalduration.count();
     double totaldurationInminutes = totaldurationInSeconds/60.0;
+     if (getrusage(RUSAGE_SELF, &r_usage) == 0) {
+        std::cout << "Memory usage: " << r_usage.ru_maxrss << " KB" << std::endl;
+    } else {
+        std::cerr << "Failed to get resource usage." << std::endl;
+    }
     cout << "Execution time: " << totaldurationInminutes << " minutes" << endl;
 
     return 0;
