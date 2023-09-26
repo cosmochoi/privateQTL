@@ -77,7 +77,6 @@ public:
     }
     void ready();
     void receiveSecrets();
-    
     void assertSize(vector<ZZ_p> pi, string tag);
     void assertValid(vector<ZZ_p> sigma, string tag);
     vector<uint32_t> apply_plaintext_perm(vector<uint32_t> rho, vector<uint32_t> sigma);
@@ -90,9 +89,10 @@ public:
     vector<ZZ_p> inversePerm(vector<ZZ_p> pi);
     void apply_perm_local(bool participate,vector<ZZ_p> &v, vector<ZZ_p> &pi);
     void apply_perm_localM(bool participate, vector<vector<ZZ_p>> &v, vector<ZZ_p> &pi);
+    void permutPheno(int permut);
     void shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a);
     void unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b);
-    void testMatrix(Logger& cislogger, Logger& nominalLogger);
+    void calc_corr(Logger& cislogger, Logger& nominalLogger);
     void shuffleM(vector<ZZ_p> &pi, vector<vector<ZZ_p>> &a);
     void apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k);
     void compose(vector<ZZ_p> &sigma, vector<ZZ_p> &rho);

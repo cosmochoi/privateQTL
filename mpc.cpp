@@ -638,6 +638,21 @@ void mpc::apply_perm_localM(bool participate, vector<vector<ZZ_p>> &v, vector<ZZ
         v = std::move(v2);
     }
 }
+void mpc::permutPheno(int permut)
+{
+
+    vector<uint32_t> normalized_pheno;
+    this->dataowner.recv(normalized_pheno);
+    vector<ZZ_p> pheno = convVec(normalized_pheno);
+    this->permutMat.push_back(pheno);
+        for (size_t i=0; i<permut; i++)
+        {
+            vector<ZZ_p> permuted(pheno);
+            vector<ZZ_p> pi=Frand(pheno.size()/2);
+            shuffle(pi,permuted);
+            this->permutMat.push_back(permuted);
+        }
+}
 void mpc::shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a)
 {
     assertSize(pi, "Shuffle");
@@ -757,52 +772,58 @@ void mpc::shuffleM(vector<ZZ_p> &pi, vector<vector<ZZ_p>> &a)
         reshareM(a, 0);
     }
 }
-void mpc::testMatrix(Logger& cislogger, Logger& nominalLogger)
+void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
 {
-    vector<vector<double>> matpheno, matgeno;
-    for (size_t i=0; i<this->permutMat.size(); i++)
+    if (this->permutMat.empty())
     {
-        vector<ZZ_p> row = reveal(this->permutMat[i], false);
-        vector<double> unscaledrow;
-        for (size_t j=0; j<row.size(); j++)
-        {
-            int32_t unshifted;
-            if (conv<uint32_t>(row[j]) > this->p/2)
-                unshifted = conv<int32_t>(row[j]) - this->p;
-            else
-                unshifted = conv<int32_t>(row[j]);
-            unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,3));
-        }
-        matpheno.push_back(unscaledrow);
+        throw invalid_argument("permutation matrix has not been made.");
     }
-    for (size_t i=0; i<this->geno.size(); i++)
-    {
-        vector<ZZ_p> row = reveal(this->geno[i], false);
-        vector<double> unscaledrow;
-        for (size_t j=0; j<row.size(); j++)
-        {
-            int32_t unshifted;
-            if (conv<uint32_t>(row[j]) > this->p/2)
-                unshifted = conv<int32_t>(row[j]) - this->p;
-            else
-                unshifted = conv<int32_t>(row[j]);
-            unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,3));
-        }
-        matgeno.push_back(unscaledrow);
-    }
+    // vector<vector<double>> matpheno, matgeno;
+    // for (size_t i=0; i<this->permutMat.size(); i++)
+    // {
+    //     vector<ZZ_p> row = reveal(this->permutMat[i], false);
+    //     vector<double> unscaledrow;
+    //     for (size_t j=0; j<row.size(); j++)
+    //     {
+    //         int32_t unshifted;
+    //         if (conv<uint32_t>(row[j]) > this->p/2)
+    //             unshifted = conv<int32_t>(row[j]) - this->p;
+    //         else
+    //             unshifted = conv<int32_t>(row[j]);
+    //         unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,3));
+    //     }
+    //     matpheno.push_back(unscaledrow);
+    // }
+    // for (size_t i=0; i<this->geno.size(); i++)
+    // {
+    //     vector<ZZ_p> row = reveal(this->geno[i], false);
+    //     vector<double> unscaledrow;
+    //     for (size_t j=0; j<row.size(); j++)
+    //     {
+    //         int32_t unshifted;
+    //         if (conv<uint32_t>(row[j]) > this->p/2)
+    //             unshifted = conv<int32_t>(row[j]) - this->p;
+    //         else
+    //             unshifted = conv<int32_t>(row[j]);
+    //         unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,3));
+    //     }
+    //     matgeno.push_back(unscaledrow);
+    // }
     // cout << string("Final pheno size: "+to_string(matpheno.size())+", "+to_string(matpheno[0].size())+ 
     // "\nFinal geno size: "+ to_string(matgeno.size())+", "+to_string(matgeno[0].size())+"\n");
     
     // vector<vector<ZZ_p>> matpheno = reveal(this->permutMat, false);
     // vector<vector<ZZ_p>> matgeno = reveal(this->geno, false);
     auto start = chrono::high_resolution_clock::now();
+    if (this->pid ==0)
+        cout << "Matmult execution... " << flush;
     vector<vector<ZZ_p>> matmultresult = matmult(this->geno, this->permutMat);
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> totalduration = end - start;
     double totaldurationInSeconds = totalduration.count();
     double totaldurationInminutes = totaldurationInSeconds/60.0;
     if (this->pid==0)     
-        cout << "Matmult execution time: " << totaldurationInminutes << " minutes" << endl;
+        cout << totaldurationInminutes << " minutes" << endl;
     vector<vector<double>> matcorr, r2_nominal;
     // retrieving r_nominal and r2_nominal
     for (size_t i=0; i<matmultresult.size(); i++)
@@ -915,10 +936,10 @@ void mpc::testMatrix(Logger& cislogger, Logger& nominalLogger)
         double tstat2 = dof * r2_nominal[ix][0] / (1- r2_nominal[ix][0]);
         double slope_se = abs(slope)/sqrt(tstat2);
         double r2_value = r2_nominal[ix][0];
-        double pval_nom = getPvalueFromTstat2(tstat2,dof);
+        double pval_nom = getPvalueFromTstat2(tstat2,this->permutMat[0].size()/2 - 2);
         double pval_true_df = getPvalueFromTstat2(tstat2, init_dof);
         size_t count = count_if(r_perm.begin(), r_perm.end(), [r2_value](double value) {
-            return abs(value) >= abs(r2_value);
+            return value*value >= r2_value;
         });
         double pval_beta = pbeta(pval_true_df,beta_shape1, beta_shape2,1,0);
         double pval_adj = static_cast<double>(count + 1) / (r_perm.size());
@@ -931,6 +952,7 @@ void mpc::testMatrix(Logger& cislogger, Logger& nominalLogger)
         "\nidx: "+to_string(ix)+
         "\nstd_ratio: "+to_string(std_ratio[ix])+
         "\ndof: "+to_string(dof)+"\nslope: "+to_string(slope)+"\ntstat: "+to_string(sqrt(tstat2))+"\nslope_se: "+to_string(slope_se)+
+        "\npval_true: "+to_string(pval_true_df)+"\npval_nom: "+to_string(pval_nom)+
         "\npval_perm: "+to_string(pval_adj)+"\nbeta_shape1: "+to_string(beta_shape1)+"\nbeta_shape2: "+to_string(beta_shape2)+"\npval_beta: "+to_string(pval_beta)+
         +"\n----------------------------\n");
         
@@ -1033,6 +1055,8 @@ void writeVectorToCSV(const std::vector<T>& data, int pid, int row, string name)
 
 void mpc::genperm(int row, int numCol, string norm_method, int permut)
 {
+    if (this->pid ==0)
+        cout << "Secure sort execution... ";
     auto sort_start = chrono::high_resolution_clock::now();
     vector<ZZ_p> k_i(2*this->n);
     k_i.assign(this->shares.begin(), this->shares.begin() + 2*this->n);
@@ -1064,7 +1088,7 @@ void mpc::genperm(int row, int numCol, string norm_method, int permut)
         double totaldurationInSeconds = sortduration.count();
         double totaldurationInminutes = totaldurationInSeconds/60.0;
         if (this->pid == 0)
-            cout << string("sorting execution time: "+to_string(totaldurationInminutes) +" minutes.\n");
+            cout << string(to_string(totaldurationInminutes) +" minutes.\n");
         this->permutMat.push_back(inv_cdf);
         for (size_t i=0; i<permut; i++)
         {
@@ -1265,21 +1289,13 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
     auto plus_it = this->seedpair.find((this->pid + 1) % 3);
     PRNG &minus_PRNG = *(minus_it->second);
     PRNG &plus_PRNG = *(plus_it->second);
+    vector<uint32_t> to_send;
     for (int i = 0; i < mat1.size(); ++i) 
     { // row index
         for (int j = 0; j < mat2.size(); ++j) 
         { // col index
             vector<ZZ_p> vec1=mat1[i];
             vector<ZZ_p> vec2=mat2[j];
-            // for (int m = 0; m < row2; m++) 
-            // {
-                
-            //     // cout << string("col2:"+to_string(col2)+" m:"+to_string(m)+"/ j:"+to_string(j)+"/ index:"+to_string(2*m*col2+j*col2)+"\n");
-            //     vec2[2*m]=this->pheno[2*m*col2+j*2];
-            //     vec2[2*m+1]=this->pheno[2*m*col2+j*2+1]; 
-            // }
-            // vector<ZZ_p> revec2 = reveal(vec2,false);
-            // print_vector(vec2);
             ZZ_p sum=to_ZZ_p(0);
             for (int k=0; k<vec2.size()/2; k++)
             {
@@ -1287,32 +1303,39 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
             }
             sum+=to_ZZ_p(minus_PRNG.get<uint32_t>()); // result + r1 - r2;
             sum-=to_ZZ_p(plus_PRNG.get<uint32_t>()); 
+            to_send.push_back(conv<uint32_t>(sum));
             result[i][j] = sum;
-            // cout << string("row"+to_string(i)+" col"+to_string(j)+" :"+to_string(conv<int>(sum)))<<endl;
-            // vector<ZZ_p> revec1 = reveal(vec1,false);
-            // print_vector(revec1);
-            // for (int k = 0; k < col1; ++k) {
-            //     result[i * col2 + j] += mat1[i * col1 + k] * mat2[k * col2 + j];
-            // }
+            
         }
     }
+    vector<uint32_t> to_receive;
+    this->toMinus.send(to_send);
+    this->fromPlus.recv(to_receive);
     vector<vector<ZZ_p>> finalresult(mat1.size(), vector<ZZ_p>(mat2.size()*2));
-    for (int ridx=0; ridx<result.size(); ridx++)
+    for (int ridx=0; ridx<mat1.size(); ridx++)
     {
-        vector<uint32_t> result1 = convVec(result[ridx]);
-        this->toMinus.send(result1);
-        vector<uint32_t> result2;
-        this->fromPlus.recv(result2);
-        if (result1.size() != result2.size())
-            throw runtime_error("matmult result shares are not the same size.");
-        for (int cidx=0; cidx<result[0].size(); cidx++)
+        for (int cidx=0; cidx<mat2.size(); cidx++)
         {
-            finalresult[ridx][2*cidx] = to_ZZ_p(result1[cidx]);
-            finalresult[ridx][2*cidx+1] = to_ZZ_p(result2[cidx]);
+            finalresult[ridx][2*cidx] = to_ZZ_p(to_send[ridx*mat2.size()+cidx]);
+            finalresult[ridx][2*cidx+1] = to_ZZ_p(to_receive[ridx*mat2.size()+cidx]);
         }
-        // vector<ZZ_p> recovered = reveal(finalresult[ridx], false);
-        // print_vector(recovered);
     }
+    // for (int ridx=0; ridx<result.size(); ridx++)
+    // {
+    //     vector<uint32_t> result1 = convVec(result[ridx]);
+    //     this->toMinus.send(result1);
+    //     vector<uint32_t> result2;
+    //     this->fromPlus.recv(result2);
+    //     if (result1.size() != result2.size())
+    //         throw runtime_error("matmult result shares are not the same size.");
+    //     for (int cidx=0; cidx<result[0].size(); cidx++)
+    //     {
+    //         finalresult[ridx][2*cidx] = to_ZZ_p(result1[cidx]);
+    //         finalresult[ridx][2*cidx+1] = to_ZZ_p(result2[cidx]);
+    //     }
+    //     // vector<ZZ_p> recovered = reveal(finalresult[ridx], false);
+    //     // print_vector(recovered);
+    // }
     
     // this->toMinus.send(result1);
     // vector<uint32_t> result2;
