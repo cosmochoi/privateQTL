@@ -22,8 +22,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <cstring>
-
-
+#include <Eigen/Dense>
+#include "utils.h"
+using namespace Eigen;
 using namespace osuCrypto;
 using namespace std;
 using namespace NTL;
@@ -62,7 +63,7 @@ public:
     uint32_t n;
     uint32_t p;
     double shiftsize;
-    vector<double> originalData; // TODO: Remove this!
+    typedef Eigen::Matrix <uint32_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXi;
     // reference_wrapper<std::atomic<int>> readyCounter;
     // reference_wrapper<std::mutex> mtx;
     // reference_wrapper<std::condition_variable> cv;
@@ -97,7 +98,7 @@ public:
     void apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k);
     void compose(vector<ZZ_p> &sigma, vector<ZZ_p> &rho);
     // vector<ZZ_p> get_shared_inverse(vector<ZZ_p> sigma);
-    void genperm(int row, int numCol, string norm_method, int permut);
+    void genperm(int row, string norm_method, int permut);
     void clearVectors() {
         shares.clear();
         for (auto &innerVec : geno) {
@@ -114,7 +115,35 @@ public:
     void receiveGeno();
     vector<vector<ZZ_p>> matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p>>& mat2);
     void close();
+    inline void ZZtoEigen(vector<vector<ZZ_p>>& v, MatrixXi& dest1, MatrixXi& dest2){
+    // vector<uint32_t> converted(v.size());
+    if (dest1.rows() != v.size() | dest1.cols() != v[0].size()/2|dest2.rows() != v.size() | dest2.cols() != v[0].size()/2)
+        throw invalid_argument("Set eigen matrix size to be equal, please.");
+    for (int i=0; i<v.size(); i++)
+    {
+        for (int j=0; j<v[0].size()/2; j++)
+        {
+            dest1(i,j) = conv<uint32_t>(v[i][2*j]);
+            dest2(i,j) = conv<uint32_t>(v[i][2*j+1]);
+        }
+    }
+}
 
+    inline void EigentoZZ(vector<uint32_t>& share1, vector<uint32_t>& share2, vector<vector<ZZ_p>>& dest){
+        // vector<uint32_t> converted(v.size());
+        if (share1.size() != share2.size())
+            throw invalid_argument("Your shares have different sizes.");
+        if (share1.size() != dest.size()*dest[0].size()/2)
+            throw invalid_argument("Your shares and destination matrix have different sizes.");
+        for (int i=0; i<dest.size(); i++)
+        {
+            for (int j=0; j<dest[0].size()/2; j++)
+            {
+                dest[i][2*j] = conv<ZZ_p>(share1[i*dest[0].size()/2+j]);
+                dest[i][2*j+1] = conv<ZZ_p>(share2[i*dest[0].size()/2+j]);
+            }
+        }
+}
 private:
     block commonSeed = oc::toBlock(27);
     map<int, PRNG *> seedpair;
@@ -194,6 +223,30 @@ void assert_equal(vector<T> one, vector<T> two, string tag)
 // }
 
 
+// void ZZtoEigen(vector<vector<ZZ_p>>& v, MatrixXd eigenMatrix& dest){
+//     // vector<uint32_t> converted(v.size());
+//     if (dest.rows() != v.size() | dest.cols() != v[0].size())
+//         throw invalid_argument("Set eigen matrix size to be equal, please.");
+//     for (int i=0; i<v.size(); i++)
+//     {
+//         for (int j=0; j<v[0].size(); j++)
+//         {
+//             dest(i,j) = conv<uint32_t>(v[i][j]);
+//         }
+//     }
+// }
 
+// void EigentoZZ(MatrixXd eigenMatrix& v, vector<vector<ZZ_p>>& dest){
+//     // vector<uint32_t> converted(v.size());
+//     if (v.rows() != dest.size() | v.cols() != dest[0].size())
+//         throw invalid_argument("Set ZZ_p matrix size to be equal, please.");
+//     for (int i=0; i<v.rows(); i++)
+//     {
+//         for (int j=0; j<v.cols(); j++)
+//         {
+//             dest[i][j] = conv<ZZ_p>(v(i,j));
+//         }
+//     }
+// }
 
 #endif

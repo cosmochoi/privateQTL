@@ -1,7 +1,7 @@
 
 #include "mpc.h"
 #include <cmath>
-#include "utils.h"
+// #include "utils.h"
 #include <chrono>
 #include "input.h"
 #include <sys/resource.h>
@@ -81,7 +81,7 @@ void writematrixToTSV(const vector<vector<T>>& data, int startrow, int endrow, c
         cout << "Error opening the file." << endl;
     }
 }
-vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, int numCol, bool header, bool index) {
+vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index) {
     vector<vector<double>> rowsData;
     ifstream data(filename);
     string line;
@@ -101,7 +101,7 @@ vector<vector<double>> getMatrixFile(const string& filename, int startrow, int e
                 getline(lineStream, cell, '\t');
 
             vector<double> rowVector;
-            while (currentColumn < numCol && getline(lineStream, cell, '\t')) {
+            while (getline(lineStream, cell, '\t')) {
                 try {
                     double entry = stod(cell);
                     rowVector.push_back(entry);
@@ -212,7 +212,7 @@ double findMedian(const vector<vector<double>>& matrix, size_t col) {
     }
 }
 
-void dataclient(string norm_method, int sendport1, int recvport1, string address1, int sendport2, int recvport2, string address2, int sendport3, int recvport3, string address3,int rowstart, int rowend,int numCol, string zscorefile, int permut)
+void dataclient(string norm_method, int sendport1, int recvport1, string address1, int sendport2, int recvport2, string address2, int sendport3, int recvport3, string address3,int rowstart, int rowend,string zscorefile, int permut)
 {
     IOService ios;
     Endpoint epsend1(ios, address1, sendport1, EpMode::Server);
@@ -230,7 +230,7 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
     cout << "Owner established channels with the computing parties.\n";
     NTL::SetSeed((NTL::conv<NTL::ZZ>((long)27))); // Seed change
     vector<vector<double>> pheno;
-    uint32_t p = pow(2,20);
+    uint32_t p = pow(2,21);
     ZZ_p::init(to_ZZ(p)); 
     owner_p1.send(p);
     owner_p2.send(p);
@@ -446,8 +446,8 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             // cout << string("first geno var: "+to_string(geno_var[0])+"\n");
             geno_scaled = ScaleVector(slicedgeno, pow(10,3));
             
-            vector<double> input(pheno[r].begin(), pheno[r].begin() + numCol);
-            vector<uint32_t> secrets = ScaleVector(input, pow(10,3)); // integer version of secret
+            // vector<double> input(pheno[r].begin(), pheno[r].end());
+            vector<uint32_t> secrets = ScaleVector(pheno[r], pow(10,3)); // integer version of secret
             auto smax = max_element(secrets.begin(), secrets.end());
             // uint32_t absmax = abs(*smax);
             uint32_t maxsecret = nearestPowerOf2(*smax);
@@ -686,7 +686,7 @@ vector<ZZ_p> convert(vector<int> input)
     }
     return output;
 }
-void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toOwnerPort,  string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2,int rowstart, int rowend, int numCol, vector<vector<double>>& resultVector, int permut, Logger& cisLogger, Logger& nominalLogger) //, atomic<int>& readyCounter, mutex& mtx, condition_variable& cv)
+void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toOwnerPort,  string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2,int rowstart, int rowend, vector<vector<double>>& resultVector, int permut, Logger& cisLogger, Logger& nominalLogger) //, atomic<int>& readyCounter, mutex& mtx, condition_variable& cv)
 {    
     mpc testmpc;
     // std::promise<void> promise;
@@ -711,7 +711,7 @@ void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toO
         // cout << "receiveSecrets: " << std::time(nullptr) << endl;
         testmpc.receiveGeno();
         // cout << "receiveGeno: " << std::time(nullptr) << endl;
-        testmpc.genperm(row, numCol, norm_method, permut);
+        testmpc.genperm(row, norm_method, permut);
         // cout << "genperm: " << std::time(nullptr) << endl;
         testmpc.calc_corr(cisLogger, nominalLogger);
         // cout << "testMatrix: " << std::time(nullptr) << endl;
@@ -756,20 +756,20 @@ bool isPortOpen(int port) {
     close(sockfd);
     return true;
 }
-void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vector<string>& address, int startrow, int endrow, int numCol, string zscorefile, int CPU_core, vector<vector<double>>& finalVec, int permut, Logger& cislogger, Logger& nominalLogger)
+void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vector<string>& address, int startrow, int endrow, string zscorefile, int CPU_core, vector<vector<double>>& finalVec, int permut, Logger& cislogger, Logger& nominalLogger)
 {
     // cout << "startMpcset Start\n";
     vector<thread> threads;
     vector<vector<double>> resultVectors1,resultVectors2,resultVectors3;
     thread dataClientThread(dataclient, norm_method, availPorts[startidx + 6], availPorts[startidx + 9], address[1], availPorts[startidx + 7], availPorts[startidx + 10], address[2], 
-    availPorts[startidx + 8], availPorts[startidx + 11], address[3], startrow, endrow, numCol, zscorefile, permut);
+    availPorts[startidx + 8], availPorts[startidx + 11], address[3], startrow, endrow, zscorefile, permut);
     setThreadAffinity(dataClientThread,CPU_core+0);
     threads.emplace_back(move(dataClientThread));
 
     // int startidx1 = startidx;
     thread runMPC1([=, &resultVectors1, &cislogger, &nominalLogger]() {
         runMPC(norm_method, 0, address[0], availPorts[startidx + 6], availPorts[startidx + 9], address[2], availPorts[startidx + 0], availPorts[startidx + 2], address[3], availPorts[startidx + 1], availPorts[startidx + 4], 
-        startrow, endrow, numCol, resultVectors1,permut,cislogger,nominalLogger);
+        startrow, endrow, resultVectors1,permut,cislogger,nominalLogger);
     });
     // thread runMPC1(runMPC, 0, address[0], availPorts[startidx + 6], availPorts[startidx + 9], address[2], availPorts[startidx + 0], availPorts[startidx + 2], address[3], availPorts[startidx + 1], availPorts[startidx + 4], startrow, endrow, resultVectors1);
     setThreadAffinity(runMPC1,CPU_core+1);
@@ -778,7 +778,7 @@ void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vect
     // // int startidx2 = startidx;
     thread runMPC2([=, &resultVectors2, &cislogger,&nominalLogger]() {
         runMPC(norm_method, 1, address[0], availPorts[startidx + 7], availPorts[startidx + 10], address[3], availPorts[startidx + 3], availPorts[startidx + 5], address[1], availPorts[startidx + 2], availPorts[startidx + 0], 
-        startrow, endrow,numCol,resultVectors2,permut,cislogger,nominalLogger);
+        startrow, endrow,resultVectors2,permut,cislogger,nominalLogger);
     });
     // thread runMPC2(runMPC, 1, address[0], availPorts[startidx + 7], availPorts[startidx + 10], address[3], availPorts[startidx + 3], availPorts[startidx + 5], address[1], availPorts[startidx + 2], availPorts[startidx + 0], startrow, endrow, resultVectors2);
     setThreadAffinity(runMPC2,CPU_core+2);
@@ -786,7 +786,7 @@ void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vect
 
     thread runMPC3([=, &resultVectors3, &cislogger,&nominalLogger]() {
         runMPC(norm_method, 2, address[0], availPorts[startidx + 8], availPorts[startidx + 11], address[1], availPorts[startidx + 4], availPorts[startidx + 1], address[2], availPorts[startidx + 5], availPorts[startidx + 3], 
-        startrow, endrow, numCol,resultVectors3,permut,cislogger,nominalLogger);
+        startrow, endrow,resultVectors3,permut,cislogger,nominalLogger);
     });
     // thread runMPC3(runMPC, 2, address[0], availPorts[startidx + 8], availPorts[startidx + 11], address[1], availPorts[startidx + 4], availPorts[startidx + 1], address[2], availPorts[startidx + 5], availPorts[startidx + 3], startrow, endrow, resultVectors3);
     setThreadAffinity(runMPC3,CPU_core+2);
@@ -797,9 +797,9 @@ void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vect
     swap(finalVec, resultVectors1);
 }
 
-double cal_accuracy(vector<vector<double>>& predicted, string& filename, int startrow, int endrow, int numCol)
+double cal_accuracy(vector<vector<double>>& predicted, string& filename, int startrow, int endrow)
 {
-    vector<vector<double>> actual = getMatrixFile(filename,startrow, endrow, numCol,true,true);
+    vector<vector<double>> actual = getMatrixFile(filename,startrow, endrow, true,true);
     // vector<double> actual = CSVtoVector(filename);
     // cout << string("actual matrix shape:" + to_string(actual.size())+ ","+to_string(actual[0].size())+"\n");
     // cout << string("predicted matrix shape:" + to_string(predicted.size())+ ","+to_string(predicted[0].size())+"\n");
@@ -836,22 +836,23 @@ double cal_accuracy(vector<vector<double>>& predicted, string& filename, int sta
 }
 int main(int argc, char* argv[])
 {
-    if (argc < 5)
+    if (argc < 8)
     {
-        cout << "Please provide at least four arg: low, mid, high, samplecount, permutation, zscorefile name, norm method.\n";
+        cout << "Please provide at least: low, mid, high, permutation, zscorefile name, norm method, cis_log, nominal_log.\n";
         return 1;
     }
     int lo_row = stoi(argv[1]);
     int mid_row = stoi(argv[2]);
     int hi_row = stoi(argv[3]);
-    int samplecount = stoi(argv[4]);
-    int permut = stoi(argv[5]);
-    string zscorefile = argv[6];
-    string norm_method = argv[7];
+    int permut = stoi(argv[4]);
+    string zscorefile = argv[5];
+    string norm_method = argv[6];
+    string cis_log = argv[7];
+    string nominal_log = argv[8];
     int startingPort = 12300;
     int assignedPorts=0;
     vector<int> openPorts;
-    while (assignedPorts < 24)
+    while (assignedPorts < 12)
     {
         int port = startingPort;
         if(isPortOpen(port))
@@ -869,35 +870,27 @@ int main(int argc, char* argv[])
     int numCores = thread::hardware_concurrency();
     // mutex mtx;
     // condition_variable cv;
-    // std::atomic<int> readyCounter(0);
+    print_vector(openPorts);
     vector<thread> threads;
     vector<vector<double>> resultVec1,resultVec2,resultVec3,resultVec4;
-    string nominal = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/0914nominal_output.tsv");
-    string cis = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/0914cis_output.tsv");
+    string nominal = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/"+nominal_log+".tsv");
+    string cis = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/" +cis_log+".tsv");
     Logger nominallogger(nominal), cislogger(cis);
     nominallogger.log(string("phenID\tvarID\tvarIdx\tdof\tr_nom\tr2_nom\ttstat\tpval\tslope\tslope_se"));
     cislogger.log(string("phenID\tvarID\tvarIdx\tbeta_shape1\tbeta_shape2\ttrue_dof\tpval_true_df\tr_nom\tr2_nom\ttstat\tpval_nominal\tslope\tslope_se\tpval_perm\tpval_beta"));
     thread thread1([&]() {
-        startMPCset(norm_method, openPorts, 0, address, lo_row, mid_row, samplecount, zscorefile, 0, resultVec1,permut,cislogger,nominallogger);
+        startMPCset(norm_method, openPorts, 0, address, lo_row, mid_row, zscorefile, 0, resultVec1,permut,cislogger,nominallogger);
     });
     // thread thread2([&]() {
-    //     startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,samplecount,zscorefile, 0, resultVec2,permut,cislogger,nominallogger);
+    //     startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,zscorefile, 0, resultVec2,permut,cislogger,nominallogger);
     // });
-    // thread thread3([&]() {
-    //     startMPCset(openPorts, 24, address, 2, 3,samplecount,zscorefile, 0, resultVec3);
-    // });
-    // thread thread4([&]() {
-    //     startMPCset(openPorts, 36, address, 3, 4,samplecount,zscorefile, 0, resultVec4);
-    // });
+
     threads.emplace_back(move(thread1));
     // threads.emplace_back(move(thread2));
-    // threads.emplace_back(move(thread3));
-    // threads.emplace_back(move(thread4));
+
     for (auto& thread : threads) {
         thread.join();
     }
-    // cout << resultVec1.size() << endl;
-    // cout << resultVec2[0].size() << endl;
     resultVec1.insert(resultVec1.end(), resultVec2.begin(), resultVec2.end());
     string actual_filename;
     if (norm_method == "qn")

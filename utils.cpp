@@ -18,7 +18,7 @@ vector<double> CSVtoVector(string filename)
     }
     return input_vec;
 }
-vector<double> getRowFromMatrixFile(string& filename, int rowIndex, int numCol) {
+vector<double> getRowFromMatrixFile(string& filename, int rowIndex) {
     vector<double> rowVector;
     ifstream data(filename);
     string line;
@@ -40,9 +40,6 @@ vector<double> getRowFromMatrixFile(string& filename, int rowIndex, int numCol) 
                     currentColumn++;
                     continue;
                 }
-                if (currentColumn > numCol){
-                    break;
-                }
                 try {
                 double entry = stod(cell);
                 rowVector.push_back(entry);
@@ -61,34 +58,73 @@ void read_bedfile_row(vector<double>& rowData, string& geneID, const string& fil
     // vector<double> rowData;
     ifstream data(filename);
     string line;
-    // Skip the header if required
-    if (header)
-        getline(data, line);
-    // Skip rows until the desired row
-    for (int currentRow = 0; currentRow < row; ++currentRow) {
-        if (!getline(data, line)) {
-            cerr << "Desired row not found." << endl;
+    int currentRow = 0;
+    int index = 0;
+    while (getline(data, line)) {
+        if (header){
+            if (currentRow == 0) {
+            // Skip the first row (header)
+            currentRow++;
+            continue;
+            }
+            index = currentRow-1;
         }
-    }
-    stringstream lineStream(line);
-    string cell;
-    // Skip the first N columns
-    for (int i = 0; i < skipcols; ++i) {
-        if (!getline(lineStream, cell, '\t')) {
-            cerr << "Not enough columns in the row." << endl;
+        else {
+            index = currentRow;
         }
-        if (i == skipcols-1)
-            geneID = cell;
+        if (index == row) {
+            stringstream lineStream(line);
+            string cell;
+            int currentColumn = 0;
 
-    }
-    while (getline(lineStream, cell, '\t')) {
-        try {
-            double entry = stod(cell);
-            rowData.push_back(entry);
-        } catch (const exception& e) {
-            cerr << "Exception caught: " << e.what() << endl;
+            while (getline(lineStream, cell, '\t')) 
+            {
+                if (currentColumn < skipcols) {
+                    if (currentColumn == skipcols-1)
+                        geneID = cell;
+                    currentColumn++;
+                    continue;
+                }
+                try {
+                double entry = stod(cell);
+                rowData.push_back(entry);
+                }
+                catch (const exception& e) {
+                    cerr << "Exception caught: " << e.what() << std::endl;
+                }
+                currentColumn++;
+            }
         }
+        currentRow++;
     }
+    // // Skip the header if required
+    // if (header)
+    //     getline(data, line);
+    // // Skip rows until the desired row
+    // for (int currentRow = 0; currentRow < row-1; ++currentRow) {
+    //     if (!getline(data, line)) {
+    //         cerr << "Desired row not found." << endl;
+    //     }
+    // }
+    // stringstream lineStream(line);
+    // string cell;
+    // // Skip the first N columns
+    // for (int i = 0; i < skipcols; ++i) {
+    //     if (!getline(lineStream, cell, '\t')) {
+    //         cerr << "Not enough columns in the row." << endl;
+    //     }
+    //     if (i == skipcols-1)
+    //         geneID = cell;
+
+    // }
+    // while (getline(lineStream, cell, '\t')) {
+    //     try {
+    //         double entry = stod(cell);
+    //         rowData.push_back(entry);
+    //     } catch (const exception& e) {
+    //         cerr << "Exception caught: " << e.what() << endl;
+    //     }
+    // }
     data.close();
 }
 vector<vector<double>> getTPMFromMatrixFile(const string& filename, vector<string>& geneID) {
@@ -472,3 +508,33 @@ double center_normalize_vec(vector<double>& row) {
 
     return row_variance;
 }
+
+// void ZZtoEigen(vector<vector<ZZ_p>>& v, MatrixXi& dest1, MatrixXi& dest2){
+//     // vector<uint32_t> converted(v.size());
+//     if (dest1.rows() != v.size() | dest1.cols() != v[0].size()/2|dest2.rows() != v.size() | dest2.cols() != v[0].size()/2)
+//         throw invalid_argument("Set eigen matrix size to be equal, please.");
+//     for (int i=0; i<v.size(); i++)
+//     {
+//         for (int j=0; j<v[0].size()/2; j++)
+//         {
+//             dest1(i,j) = conv<uint32_t>(v[i][2*j]);
+//             dest2(i,j) = conv<uint32_t>(v[i][2*j+1]);
+//         }
+//     }
+// }
+
+// void EigentoZZ(vector<uint32_t>& share1, vector<uint32_t>& share2, vector<vector<ZZ_p>>& dest){
+//     // vector<uint32_t> converted(v.size());
+//     if (share1.size() != share2.size())
+//         throw invalid_argument("Your shares have different sizes.");
+//     if (share1.size() != dest.size()*dest[0].size()/2)
+//         throw invalid_argument("Your shares and destination matrix have different sizes.");
+//     for (int i=0; i<dest.size(); i++)
+//     {
+//         for (int j=0; j<dest[0].size()/2; j++)
+//         {
+//             dest[i][2*j] = conv<ZZ_p>(share1[i*dest[0].size()/2+j]);
+//             dest[i][2*j+1] = conv<ZZ_p>(share2[i*dest[0].size()/2+j]);
+//         }
+//     }
+// }

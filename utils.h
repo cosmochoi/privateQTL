@@ -11,16 +11,19 @@
 #include <gsl/gsl_sf_psi.h>
 #include <gsl/gsl_sf_gamma.h>
 #include <Rmath.h>
+#include <Eigen/Dense>
+#include <NTL/vec_ZZ_p.h>
+#include <NTL/ZZ.h>
+#include <NTL/ZZ_p.h>
 #define BETA_SHAPE1_MIN 0.1
 #define BETA_SHAPE2_MIN 1
 #define BETA_SHAPE1_MAX 10
 #define BETA_SHAPE2_MAX 1000000	
 using namespace std;
-
+using namespace Eigen;
+using namespace NTL;
 vector<double> CSVtoVector(string filename);
-// vector<double> getRowFromMatrixFile(string& filename, int rowIndex, int numCol);
-
-vector<double> getRowFromMatrixFile(string& filename, int rowIndex, int numCol);
+vector<double> getRowFromMatrixFile(string& filename, int rowIndex);
 void read_bedfile_row(vector<double>& rowData, string& geneID, const string& filename, int row, int skipcols, bool header);
 vector<vector<double>> getTPMFromMatrixFile(const string& filename, vector<string>& geneID);
 vector<vector<uint32_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID);
@@ -43,4 +46,6 @@ double getPvalue(double corr, double df);
 double getSlope(double nominal_correlation, double psd, double gsd);
 vector<double> center_normalize(vector<vector<double>>& M);
 double center_normalize_vec(vector<double>& M);
+// void ZZtoEigen(vector<vector<ZZ_p>>& v, MatrixXi& dest1, MatrixXi& dest2);
+// void EigentoZZ(vector<uint32_t>& share1, vector<uint32_t>& share2, vector<vector<ZZ_p>>& dest);
 #endif
