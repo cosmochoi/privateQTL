@@ -24,6 +24,7 @@
 #include <cstring>
 #include <Eigen/Dense>
 #include "utils.h"
+#include <omp.h>
 using namespace Eigen;
 using namespace osuCrypto;
 using namespace std;
@@ -53,7 +54,6 @@ private:
 };
 class mpc
 {
-
 public:
     IOService ios;
     PRNG globalprng;
@@ -64,11 +64,7 @@ public:
     uint32_t p;
     double shiftsize;
     typedef Eigen::Matrix <uint32_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXi;
-    // reference_wrapper<std::atomic<int>> readyCounter;
-    // reference_wrapper<std::mutex> mtx;
-    // reference_wrapper<std::condition_variable> cv;
-    // mpc(atomic<int>& counter, mutex& mtx, condition_variable& cv)
-    //     : readyCounter(counter), mtx(mtx), cv(cv) {};
+    
     mpc(){};
     bool initialize(int pid, string ownerIP, int ownerPort, int toOwnerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2);
     bool setupChannels(string ownerIP, int ownerPort, int toOwnerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2);
@@ -93,6 +89,7 @@ public:
     void permutPheno(int permut);
     void shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a);
     void unshuffle(vector<ZZ_p> &pi, vector<ZZ_p> &b);
+    void reveal_matrix(vector<vector<ZZ_p>>& geno, vector<vector<ZZ_p>>& pheno,string name);
     void calc_corr(Logger& cislogger, Logger& nominalLogger);
     void shuffleM(vector<ZZ_p> &pi, vector<vector<ZZ_p>> &a);
     void apply_shared_perm(vector<ZZ_p> &rho, vector<ZZ_p> &k);
@@ -115,19 +112,39 @@ public:
     void receiveGeno();
     vector<vector<ZZ_p>> matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p>>& mat2);
     void close();
-    inline void ZZtoEigen(vector<vector<ZZ_p>>& v, MatrixXi& dest1, MatrixXi& dest2){
-    // vector<uint32_t> converted(v.size());
-    if (dest1.rows() != v.size() | dest1.cols() != v[0].size()/2|dest2.rows() != v.size() | dest2.cols() != v[0].size()/2)
-        throw invalid_argument("Set eigen matrix size to be equal, please.");
-    for (int i=0; i<v.size(); i++)
-    {
-        for (int j=0; j<v[0].size()/2; j++)
-        {
-            dest1(i,j) = conv<uint32_t>(v[i][2*j]);
-            dest2(i,j) = conv<uint32_t>(v[i][2*j+1]);
+    inline void ZZtoEigen(vector<vector<ZZ_p>>& v, MatrixXi& dest1, MatrixXi& dest2, bool transposed) {
+        int numRowsV = v.size();
+        int numColsV = v[0].size();
+
+        if (transposed) {
+            // Check dimensions
+            if (dest1.rows() != numColsV / 2 || dest1.cols() != numRowsV ||
+                dest2.rows() != numColsV / 2 || dest2.cols() != numRowsV) {
+                throw invalid_argument("Set eigen matrix size to be equal, please.");
+            }
+
+            for (int i = 0; i < numRowsV; i++) {
+                for (int j = 0; j < numColsV / 2; j++) {
+                    dest1(j, i) = conv<uint32_t>(v[i][2 * j]);
+                    dest2(j, i) = conv<uint32_t>(v[i][2 * j + 1]);
+                }
+            }
+        } else {
+            // Check dimensions
+            if (dest1.rows() != numRowsV || dest1.cols() != numColsV / 2 ||
+                dest2.rows() != numRowsV || dest2.cols() != numColsV / 2) {
+                throw invalid_argument("Set eigen matrix size to be equal, please.");
+            }
+
+            for (int i = 0; i < numRowsV; i++) {
+                for (int j = 0; j < numColsV / 2; j++) {
+                    dest1(i, j) = conv<uint32_t>(v[i][2 * j]);
+                    dest2(i, j) = conv<uint32_t>(v[i][2 * j + 1]);
+                }
+            }
         }
     }
-}
+
 
     inline void EigentoZZ(vector<uint32_t>& share1, vector<uint32_t>& share2, vector<vector<ZZ_p>>& dest){
         // vector<uint32_t> converted(v.size());
@@ -144,6 +161,7 @@ public:
             }
         }
 }
+void writeEigenToTSV(Eigen::Matrix <double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& mat, const string& name);
 private:
     block commonSeed = oc::toBlock(27);
     map<int, PRNG *> seedpair;

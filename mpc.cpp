@@ -18,27 +18,16 @@ vector<uint32_t> convVec(vector<ZZ_p> v){
     return converted;
 }
 
-template <typename T>
-void writematrixToTSV(const vector<vector<T>>& data, const string& name)
+void mpc::writeEigenToTSV(Eigen::Matrix <double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& mat, const string& name)
 {
     string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + ".tsv";
     ofstream file(filename);
-    if (file.is_open())
-    {
-        for (int i = 0; i < data.size(); ++i)
-        {
-            for (const T& value : data[i])
-            {
-                file << value << "\t";
-            }
-            file << std::endl;
-        }
+     if (file.is_open()) {
+        file << mat;
         file.close();
-        cout << string(name + " matrix successfully written to TSV file.\n");
-    }
-    else
-    {
-        cout << "Error opening the file." << endl;
+        std::cout << name + " matrix successfully written to TSV file.\n";
+    } else {
+        std::cout << "Error opening the file." << std::endl;
     }
 }
 double cal_accuracy(vector<double>& predicted, string& filename, int N)
@@ -773,51 +762,75 @@ void mpc::shuffleM(vector<ZZ_p> &pi, vector<vector<ZZ_p>> &a)
         reshareM(a, 0);
     }
 }
+void mpc::reveal_matrix(vector<vector<ZZ_p>>& geno, vector<vector<ZZ_p>>& pheno,string name)
+{
+    // vector<vector<double>> sliced_geno;
+    Eigen::Matrix <double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> sliced_geno;
+    sliced_geno.resize(geno.size(), geno[0].size()/2);
+    for (size_t i=0; i<geno.size(); i++)
+    {
+        vector<ZZ_p> row = reveal(geno[i], false); 
+        vector<double> unscaledrow;
+        for (size_t j=0; j<row.size(); j++)
+        {
+            int32_t unshifted;
+            if (conv<uint32_t>(row[j]) > this->p/2)
+                unshifted = conv<int32_t>(row[j]) - this->p;
+            else
+                unshifted = conv<int32_t>(row[j]);
+            double r_nom = static_cast<double>(unshifted)/pow(10,3);
+            unscaledrow.push_back(r_nom);
+            // r2row.push_back(r_nom*r_nom);
+
+        }
+        // sliced_geno.push_back(unscaledrow);
+        Eigen::Map<Eigen::VectorXd>(sliced_geno.row(i).data(), unscaledrow.size()) = 
+            Eigen::VectorXd::Map(unscaledrow.data(), unscaledrow.size());
+    }
+    Eigen::Matrix <double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> pheno_mat;
+    pheno_mat.resize(pheno.size(), pheno[0].size()/2);
+    for (size_t i=0; i<pheno.size(); i++)
+    {
+        vector<ZZ_p> row = reveal(pheno[i], false); 
+        vector<double> unscaledrow;
+        for (size_t j=0; j<row.size(); j++)
+        {
+            int32_t unshifted;
+            if (conv<uint32_t>(row[j]) > this->p/2)
+                unshifted = conv<int32_t>(row[j]) - this->p;
+            else
+                unshifted = conv<int32_t>(row[j]);
+            double r_nom = static_cast<double>(unshifted)/pow(10,3);
+            unscaledrow.push_back(r_nom);
+            // r2row.push_back(r_nom*r_nom);
+
+        }
+        // pheno_mat.push_back(unscaledrow);
+        Eigen::Map<Eigen::VectorXd>(pheno_mat.row(i).data(), unscaledrow.size()) = 
+            Eigen::VectorXd::Map(unscaledrow.data(), unscaledrow.size());
+    }
+    Eigen::Matrix <double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mult_res;
+    mult_res.resize(sliced_geno.rows(), pheno_mat.rows());
+    auto start = chrono::high_resolution_clock::now();
+    mult_res = sliced_geno*pheno_mat.transpose();
+    auto end = chrono::high_resolution_clock::now();
+    chrono::duration<double> totalduration = end - start;
+    double totaldurationInminutes = totalduration.count()/60.0;
+    if (this->pid ==0)
+        cout << string("\nPlaintext Eigen matmult took " + to_string(totaldurationInminutes)+" minutes.") << endl;
+    // writeEigenToTSV(mult_res, name);
+}
 void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
 {
     if (this->permutMat.empty())
     {
         throw invalid_argument("permutation matrix has not been made.");
     }
-    // vector<vector<double>> matpheno, matgeno;
-    // for (size_t i=0; i<this->permutMat.size(); i++)
-    // {
-    //     vector<ZZ_p> row = reveal(this->permutMat[i], false);
-    //     vector<double> unscaledrow;
-    //     for (size_t j=0; j<row.size(); j++)
-    //     {
-    //         int32_t unshifted;
-    //         if (conv<uint32_t>(row[j]) > this->p/2)
-    //             unshifted = conv<int32_t>(row[j]) - this->p;
-    //         else
-    //             unshifted = conv<int32_t>(row[j]);
-    //         unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,3));
-    //     }
-    //     matpheno.push_back(unscaledrow);
-    // }
-    // for (size_t i=0; i<this->geno.size(); i++)
-    // {
-    //     vector<ZZ_p> row = reveal(this->geno[i], false);
-    //     vector<double> unscaledrow;
-    //     for (size_t j=0; j<row.size(); j++)
-    //     {
-    //         int32_t unshifted;
-    //         if (conv<uint32_t>(row[j]) > this->p/2)
-    //             unshifted = conv<int32_t>(row[j]) - this->p;
-    //         else
-    //             unshifted = conv<int32_t>(row[j]);
-    //         unscaledrow.push_back(static_cast<double>(unshifted)/pow(10,3));
-    //     }
-    //     matgeno.push_back(unscaledrow);
-    // }
-    // cout << string("Final pheno size: "+to_string(matpheno.size())+", "+to_string(matpheno[0].size())+ 
-    // "\nFinal geno size: "+ to_string(matgeno.size())+", "+to_string(matgeno[0].size())+"\n");
-    
-    // vector<vector<ZZ_p>> matpheno = reveal(this->permutMat, false);
-    // vector<vector<ZZ_p>> matgeno = reveal(this->geno, false);
     auto start = chrono::high_resolution_clock::now();
     if (this->pid ==0)
         cout << "Matmult execution... " << flush;
+    reveal_matrix(this->geno, this->permutMat, "plaintext");
+    // reveal_matrix(this->permutMat, "permutMat");
     vector<vector<ZZ_p>> matmultresult = matmult(this->geno, this->permutMat);
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> totalduration = end - start;
@@ -1230,7 +1243,7 @@ void mpc::receiveGeno()
 }
 vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p>>& mat2)
 {
-    auto start = chrono::high_resolution_clock::now();
+    
     if (mat1[0].size() != mat2[0].size()) 
         throw logic_error("mat1 column size and mat2 row size do not match.");
     // vector<vector<ZZ_p>> result(mat1.size(), vector<ZZ_p>(mat2.size()));
@@ -1247,23 +1260,32 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
     // // Eigen::Matrix <uint32_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mat1_share2;
     mat1_share1.resize(mat1.size(), mat1[0].size()/2);
     mat1_share2.resize(mat1.size(), mat1[0].size()/2);
-    mat2_share1.resize(mat2.size(), mat2[0].size()/2);
-    mat2_share2.resize(mat2.size(), mat2[0].size()/2);
-    // MatrixXd mat1_share1(mat1.size(), mat1[0].size()/2, Eigen::RowMajor);
-    // MatrixXd mat1_share2(mat1.size(), mat1[0].size()/2, Eigen::RowMajor); //TODO: Split shares into different matrices
-    // MatrixXd mat2_share1(mat2.size(), mat2[0].size()/2, Eigen::RowMajor);
-    // MatrixXd mat2_share2(mat2.size(), mat2[0].size()/2, Eigen::RowMajor);
-    ZZtoEigen(mat1, mat1_share1,mat1_share2);
-    ZZtoEigen(mat2, mat2_share1,mat2_share2);
+    // mat2_share1.resize(mat2.size(), mat2[0].size()/2);
+    // mat2_share2.resize(mat2.size(), mat2[0].size()/2);
+    mat2_share1.resize(mat2[0].size()/2, mat2.size());
+    mat2_share2.resize(mat2[0].size()/2, mat2.size()); // split into transposes
+    ZZtoEigen(mat1, mat1_share1,mat1_share2,false);
+    ZZtoEigen(mat2, mat2_share1,mat2_share2,true);
     
     MatrixXi result1;
     result1.resize(mat1_share1.rows(), mat2_share1.cols());
     // MatrixXd result1(mat1_share1.rows(), mat2_share1.cols(), Eigen::RowMajor);
     if (this->pid ==0)
+    {
+        cout << "mat1 share size" << mat1_share1.rows() << ", "<< mat1_share1.cols() << endl;
+        cout << "mat2 share size" << mat2_share1.rows() << ", "<< mat2_share1.cols() << endl;
         cout << "Eigen matmult..." << flush;
-    result1 = mat1_share1*mat2_share1.transpose() + mat1_share1*mat2_share2.transpose() + mat1_share2*mat2_share1.transpose();
+    }
+        
+    auto start = chrono::high_resolution_clock::now();
+    result1.noalias() = mat1_share1*mat2_share1 + mat1_share1*mat2_share2 + mat1_share2*mat2_share1;
+    // result1 = mat1_share1*mat2_share1.transpose() + mat1_share1*mat2_share2.transpose() + mat1_share2*mat2_share1.transpose();
+    auto matmult = chrono::high_resolution_clock::now();
+    chrono::duration<double> matmult_dur = matmult - start;
+    double matmult_InSeconds = matmult_dur.count();
+    double matmult_Inminutes = matmult_InSeconds/ 60.0;
     if (this->pid ==0)
-        cout << "finished. Creating random number matrices..." << flush;
+        cout << string("finished "+to_string(matmult_Inminutes)+" minutes. Creating random number matrices...") << flush;
     MatrixXi random1, random2;
     random1.resize(result1.rows(), result1.cols());
     random2.resize(result1.rows(), result1.cols());
@@ -1276,31 +1298,29 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
     if (this->pid ==0)
         cout << "finished. Flattening to send vector..." << flush;
     vector<uint32_t> to_send(result1.data(), result1.data()+result1.size());
-    // if (this->pid ==0)
-    //     cout << "First nested loop entering..." << flush;
-    // for (int i = 0; i < mat1.size(); ++i) 
-    // { // row index
-    //     for (int j = 0; j < mat2.size(); ++j) 
-    //     { // col index
-    //         // vector<ZZ_p> vec1=mat1[i];
-    //         // vector<ZZ_p> vec2=mat2[j];
-    //         ZZ_p sum=to_ZZ_p(0);
-    //         for (int k=0; k<mat2[j].size()/2; k++) 
-    //         {
-    //             sum += mat1[i][2*k]*mat2[j][2*k]+mat1[i][2*k+1]*mat2[j][2*k]+mat1[i][2*k]*mat2[j][2*k+1];
-    //         }
-    //         sum+=to_ZZ_p(minus_PRNG.get<uint32_t>()); // result + r1 - r2;
-    //         sum-=to_ZZ_p(plus_PRNG.get<uint32_t>()); 
-    //         to_send.push_back(conv<uint32_t>(sum));
-    //         // result[i][j] = sum;
-    //     }
-    // }
-    vector<uint32_t> to_receive;
+
     if (this->pid ==0)
-        cout << string("finished with vector size:"+ to_string(to_send.size()) +".\nSending and receiving...") << flush;
-    this->toMinus.send(to_send);
-    cout << string("\n"+to_string(this->pid)+" sent vector.\n");
-    this->fromPlus.recv(to_receive);
+        cout << string("finished with vector size:"+ to_string(to_send.size()) +".\nSending and receiving...") << endl;
+    
+    //////////
+    const size_t chunkSize = 2000000;
+    vector<uint32_t> received_data;
+    for (size_t i = 0; i < to_send.size(); i += chunkSize) {
+        size_t remaining = min(chunkSize, to_send.size() - i);
+        vector<uint32_t> chunk_send(to_send.begin() + i, to_send.begin() + i + remaining);
+        // Send 'to_send' in chunks of size 500 (or less if remaining is less than 500)
+        this->toMinus.send(chunk_send);
+        vector<uint32_t> to_receive;
+        this->fromPlus.recv(to_receive);
+        received_data.insert(received_data.end(), to_receive.begin(), to_receive.end());
+        if(this->pid == 0)
+            cout << "\tSent and received " << remaining << " elements in this chunk." << endl;
+    }
+    // vector<uint32_t> to_receive;
+    
+    // this->toMinus.send(to_send);
+    // cout << string("\n"+to_string(this->pid)+" sent vector.\n");
+    // this->fromPlus.recv(to_receive);
     if (this->pid ==0)
         cout << "Send and receive done:" << flush;
     auto postRecv = chrono::high_resolution_clock::now();
@@ -1309,13 +1329,13 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
     double totaldurationInminutes = totaldurationInSeconds/ 60.0;
     if (this->pid==0){
         cout << totaldurationInminutes << " minutes" << endl;
-        cout << string("\t"+to_string(to_send.size())+", "+to_string(to_receive.size()));
+        cout << string(to_string(to_send.size())+", "+to_string(received_data.size()));
     }     
-    if (this->pid ==0)
-        cout << "..Done and received. Second loop entering...." << flush;
-    auto second = chrono::high_resolution_clock::now();
+    // if (this->pid ==0)
+    //     cout << "..Done and received. Second loop entering...." << flush;
+    // auto second = chrono::high_resolution_clock::now();
     vector<vector<ZZ_p>> finalresult(mat1.size(), vector<ZZ_p>(mat2.size()*2));
-    EigentoZZ(to_send, to_receive, finalresult);
+    EigentoZZ(to_send, received_data, finalresult);
     // for (int ridx=0; ridx<mat1.size(); ridx++)
     // {
     //     for (int cidx=0; cidx<mat2.size(); cidx++)
@@ -1324,12 +1344,12 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
     //         finalresult[ridx][2*cidx+1] = to_ZZ_p(to_receive[ridx*mat2.size()+cidx]);
     //     }
     // }
-    auto secondend = chrono::high_resolution_clock::now();
-    chrono::duration<double> second_dur = secondend - second;
-    double secondInSeconds = second_dur.count();
-    double secondInminutes = secondInSeconds/ 60.0;
-    if (this->pid ==0)
-        cout << secondInminutes << " minutes."<< endl;
+    // auto secondend = chrono::high_resolution_clock::now();
+    // chrono::duration<double> second_dur = secondend - second;
+    // double secondInSeconds = second_dur.count();
+    // double secondInminutes = secondInSeconds/ 60.0;
+    // if (this->pid ==0)
+    //     cout << secondInminutes << " minutes."<< endl;
 
     return finalresult;
 }

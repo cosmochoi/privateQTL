@@ -81,47 +81,47 @@ void writematrixToTSV(const vector<vector<T>>& data, int startrow, int endrow, c
         cout << "Error opening the file." << endl;
     }
 }
-vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index) {
-    vector<vector<double>> rowsData;
-    ifstream data(filename);
-    string line;
-    int currentRow = 0;
+// vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index) {
+//     vector<vector<double>> rowsData;
+//     ifstream data(filename);
+//     string line;
+//     int currentRow = 0;
 
-    if (header)// Skip the first row (header)
-        getline(data, line);
+//     if (header)// Skip the first row (header)
+//         getline(data, line);
 
-    while (getline(data, line) && currentRow < endrow) {
-        if (currentRow >= startrow) { // Start reading from startrow
-            stringstream lineStream(line);
-            string cell;
-            int currentColumn = 0;
+//     while (getline(data, line) && currentRow < endrow) {
+//         if (currentRow >= startrow) { // Start reading from startrow
+//             stringstream lineStream(line);
+//             string cell;
+//             int currentColumn = 0;
 
-            // Skip the first column
-            if (index)
-                getline(lineStream, cell, '\t');
+//             // Skip the first column
+//             if (index)
+//                 getline(lineStream, cell, '\t');
 
-            vector<double> rowVector;
-            while (getline(lineStream, cell, '\t')) {
-                try {
-                    double entry = stod(cell);
-                    rowVector.push_back(entry);
-                } catch (const exception& e) {
-                    cerr << "Exception caught: " << e.what() << endl;
-                }
-                currentColumn++;
-            }
+//             vector<double> rowVector;
+//             while (getline(lineStream, cell, '\t')) {
+//                 try {
+//                     double entry = stod(cell);
+//                     rowVector.push_back(entry);
+//                 } catch (const exception& e) {
+//                     cerr << "Exception caught: " << e.what() << endl;
+//                 }
+//                 currentColumn++;
+//             }
 
-            rowsData.push_back(rowVector);
-        }
+//             rowsData.push_back(rowVector);
+//         }
 
-        currentRow++;
-    }
+//         currentRow++;
+//     }
 
-    // Close the file after reading
-    data.close();
+//     // Close the file after reading
+//     data.close();
 
-    return rowsData;
-}
+//     return rowsData;
+// }
 vector<double> get_quantiles(vector<vector<double>>& phen_matrix, vector<vector<size_t>>& rank_matrix) {
     // vector<vector<size_t>> rank_matrix(phen_matrix[0].size(), vector<size_t>(phen_matrix.size()));
     for (size_t i = 0; i < phen_matrix[0].size(); i++) {

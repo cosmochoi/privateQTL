@@ -509,32 +509,67 @@ double center_normalize_vec(vector<double>& row) {
     return row_variance;
 }
 
-// void ZZtoEigen(vector<vector<ZZ_p>>& v, MatrixXi& dest1, MatrixXi& dest2){
-//     // vector<uint32_t> converted(v.size());
-//     if (dest1.rows() != v.size() | dest1.cols() != v[0].size()/2|dest2.rows() != v.size() | dest2.cols() != v[0].size()/2)
-//         throw invalid_argument("Set eigen matrix size to be equal, please.");
-//     for (int i=0; i<v.size(); i++)
-//     {
-//         for (int j=0; j<v[0].size()/2; j++)
-//         {
-//             dest1(i,j) = conv<uint32_t>(v[i][2*j]);
-//             dest2(i,j) = conv<uint32_t>(v[i][2*j+1]);
-//         }
-//     }
-// }
+template <typename T>
+void writematrixToTSV(const vector<vector<T>>& data, int startrow, int endrow, const string& name)
+{
+    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + "_row" + std::to_string(startrow) + "_" + std::to_string(endrow) + ".tsv";
+    ofstream file(filename);
+    if (file.is_open())
+    {
+        for (int i = startrow; i <= endrow && i < data.size(); ++i)
+        {
+            for (const T& value : data[i])
+            {
+                file << value << "\t";
+            }
+            file << std::endl;
+        }
+        file.close();
+        cout << string(name+" matrix successfully written to TSV file.") << endl;
+    }
+    else
+    {
+        cout << "Error opening the file." << endl;
+    }
+}
+vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index) {
+    vector<vector<double>> rowsData;
+    ifstream data(filename);
+    string line;
+    int currentRow = 0;
 
-// void EigentoZZ(vector<uint32_t>& share1, vector<uint32_t>& share2, vector<vector<ZZ_p>>& dest){
-//     // vector<uint32_t> converted(v.size());
-//     if (share1.size() != share2.size())
-//         throw invalid_argument("Your shares have different sizes.");
-//     if (share1.size() != dest.size()*dest[0].size()/2)
-//         throw invalid_argument("Your shares and destination matrix have different sizes.");
-//     for (int i=0; i<dest.size(); i++)
-//     {
-//         for (int j=0; j<dest[0].size()/2; j++)
-//         {
-//             dest[i][2*j] = conv<ZZ_p>(share1[i*dest[0].size()/2+j]);
-//             dest[i][2*j+1] = conv<ZZ_p>(share2[i*dest[0].size()/2+j]);
-//         }
-//     }
-// }
+    if (header)// Skip the first row (header)
+        getline(data, line);
+
+    while (getline(data, line) && currentRow < endrow) {
+        if (currentRow >= startrow) { // Start reading from startrow
+            stringstream lineStream(line);
+            string cell;
+            int currentColumn = 0;
+
+            // Skip the first column
+            if (index)
+                getline(lineStream, cell, '\t');
+
+            vector<double> rowVector;
+            while (getline(lineStream, cell, '\t')) {
+                try {
+                    double entry = stod(cell);
+                    rowVector.push_back(entry);
+                } catch (const exception& e) {
+                    cerr << "Exception caught: " << e.what() << endl;
+                }
+                currentColumn++;
+            }
+
+            rowsData.push_back(rowVector);
+        }
+
+        currentRow++;
+    }
+
+    // Close the file after reading
+    data.close();
+
+    return rowsData;
+}

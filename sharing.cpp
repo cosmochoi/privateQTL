@@ -58,70 +58,70 @@ void writeVectorToCSV(const vector<T>& data, string name)
         cout << "Error opening the file." << endl;
     }
 }
-template <typename T>
-void writematrixToTSV(const vector<vector<T>>& data, int startrow, int endrow, const string& name)
-{
-    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + "_row" + std::to_string(startrow) + "_" + std::to_string(endrow) + ".tsv";
-    ofstream file(filename);
-    if (file.is_open())
-    {
-        for (int i = startrow; i <= endrow && i < data.size(); ++i)
-        {
-            for (const T& value : data[i])
-            {
-                file << value << "\t";
-            }
-            file << std::endl;
-        }
-        file.close();
-        cout << string(name+" matrix successfully written to TSV file.") << endl;
-    }
-    else
-    {
-        cout << "Error opening the file." << endl;
-    }
-}
-vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index) {
-    vector<vector<double>> rowsData;
-    ifstream data(filename);
-    string line;
-    int currentRow = 0;
+// template <typename T>
+// void writematrixToTSV(const vector<vector<T>>& data, int startrow, int endrow, const string& name)
+// {
+//     string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + "_row" + std::to_string(startrow) + "_" + std::to_string(endrow) + ".tsv";
+//     ofstream file(filename);
+//     if (file.is_open())
+//     {
+//         for (int i = startrow; i <= endrow && i < data.size(); ++i)
+//         {
+//             for (const T& value : data[i])
+//             {
+//                 file << value << "\t";
+//             }
+//             file << std::endl;
+//         }
+//         file.close();
+//         cout << string(name+" matrix successfully written to TSV file.") << endl;
+//     }
+//     else
+//     {
+//         cout << "Error opening the file." << endl;
+//     }
+// }
+// vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index) {
+//     vector<vector<double>> rowsData;
+//     ifstream data(filename);
+//     string line;
+//     int currentRow = 0;
 
-    if (header)// Skip the first row (header)
-        getline(data, line);
+//     if (header)// Skip the first row (header)
+//         getline(data, line);
 
-    while (getline(data, line) && currentRow < endrow) {
-        if (currentRow >= startrow) { // Start reading from startrow
-            stringstream lineStream(line);
-            string cell;
-            int currentColumn = 0;
+//     while (getline(data, line) && currentRow < endrow) {
+//         if (currentRow >= startrow) { // Start reading from startrow
+//             stringstream lineStream(line);
+//             string cell;
+//             int currentColumn = 0;
 
-            // Skip the first column
-            if (index)
-                getline(lineStream, cell, '\t');
+//             // Skip the first column
+//             if (index)
+//                 getline(lineStream, cell, '\t');
 
-            vector<double> rowVector;
-            while (getline(lineStream, cell, '\t')) {
-                try {
-                    double entry = stod(cell);
-                    rowVector.push_back(entry);
-                } catch (const exception& e) {
-                    cerr << "Exception caught: " << e.what() << endl;
-                }
-                currentColumn++;
-            }
+//             vector<double> rowVector;
+//             while (getline(lineStream, cell, '\t')) {
+//                 try {
+//                     double entry = stod(cell);
+//                     rowVector.push_back(entry);
+//                 } catch (const exception& e) {
+//                     cerr << "Exception caught: " << e.what() << endl;
+//                 }
+//                 currentColumn++;
+//             }
 
-            rowsData.push_back(rowVector);
-        }
+//             rowsData.push_back(rowVector);
+//         }
 
-        currentRow++;
-    }
+//         currentRow++;
+//     }
 
-    // Close the file after reading
-    data.close();
+//     // Close the file after reading
+//     data.close();
 
-    return rowsData;
-}
+//     return rowsData;
+// }
 vector<double> get_quantiles(vector<vector<double>>& phen_matrix, vector<vector<size_t>>& rank_matrix) {
     // vector<vector<size_t>> rank_matrix(phen_matrix[0].size(), vector<size_t>(phen_matrix.size()));
     for (size_t i = 0; i < phen_matrix[0].size(); i++) {
@@ -230,7 +230,7 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
     cout << "Owner established channels with the computing parties.\n";
     NTL::SetSeed((NTL::conv<NTL::ZZ>((long)27))); // Seed change
     vector<vector<double>> pheno;
-    uint32_t p = pow(2,21);
+    uint32_t p = pow(2,24);
     ZZ_p::init(to_ZZ(p)); 
     owner_p1.send(p);
     owner_p2.send(p);
@@ -836,6 +836,7 @@ double cal_accuracy(vector<vector<double>>& predicted, string& filename, int sta
 }
 int main(int argc, char* argv[])
 {
+    omp_set_num_threads(4);
     if (argc < 8)
     {
         cout << "Please provide at least: low, mid, high, permutation, zscorefile name, norm method, cis_log, nominal_log.\n";
@@ -873,16 +874,19 @@ int main(int argc, char* argv[])
     print_vector(openPorts);
     vector<thread> threads;
     vector<vector<double>> resultVec1,resultVec2,resultVec3,resultVec4;
-    string nominal = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/"+nominal_log+".tsv");
-    string cis = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/" +cis_log+".tsv");
-    Logger nominallogger(nominal), cislogger(cis);
+    string nominal = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/"+nominal_log);
+    string cis = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/" +cis_log);
+    Logger nominallogger(nominal+to_string(lo_row)+"_"+to_string(mid_row)+".tsv"), cislogger(cis+to_string(lo_row)+"_"+to_string(mid_row)+".tsv");
+    Logger nominallogger2(nominal+to_string(mid_row)+"_"+to_string(hi_row)+".tsv"),cislogger2(nominal+to_string(mid_row)+"_"+to_string(hi_row)+".tsv");
     nominallogger.log(string("phenID\tvarID\tvarIdx\tdof\tr_nom\tr2_nom\ttstat\tpval\tslope\tslope_se"));
     cislogger.log(string("phenID\tvarID\tvarIdx\tbeta_shape1\tbeta_shape2\ttrue_dof\tpval_true_df\tr_nom\tr2_nom\ttstat\tpval_nominal\tslope\tslope_se\tpval_perm\tpval_beta"));
+    // nominallogger2.log(string("phenID\tvarID\tvarIdx\tdof\tr_nom\tr2_nom\ttstat\tpval\tslope\tslope_se"));
+    // cislogger2.log(string("phenID\tvarID\tvarIdx\tbeta_shape1\tbeta_shape2\ttrue_dof\tpval_true_df\tr_nom\tr2_nom\ttstat\tpval_nominal\tslope\tslope_se\tpval_perm\tpval_beta"));
     thread thread1([&]() {
         startMPCset(norm_method, openPorts, 0, address, lo_row, mid_row, zscorefile, 0, resultVec1,permut,cislogger,nominallogger);
     });
     // thread thread2([&]() {
-    //     startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,zscorefile, 0, resultVec2,permut,cislogger,nominallogger);
+    //     startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,zscorefile, 0, resultVec2,permut,cislogger2,nominallogger2);
     // });
 
     threads.emplace_back(move(thread1));

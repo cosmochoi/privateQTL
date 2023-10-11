@@ -1,7 +1,9 @@
 #include "input.h"
 #include <typeinfo>
+
 // Data owners convert plink bed file to dataframe using gtex pipeline
 void getGenotype(const string& filename, vector<vector<double>>& geno, vector<string>& snpID) {
+    // cout << "Fetching genotype into memory..\n";
     vector<vector<double>> rowsData;
     ifstream data(filename);
     string line;
@@ -11,6 +13,7 @@ void getGenotype(const string& filename, vector<vector<double>>& geno, vector<st
     getline(data, line);
 
     while (getline(data, line)) {
+        
         stringstream lineStream(line);
         string cell;
         // int currentColumn = 0;
@@ -87,7 +90,7 @@ prepareInput::prepareInput(string& pheno_pos, string& geno_matrix, string& geno_
     genePos = readDataFile(pheno_pos);
     getSNPpos(geno_pos, snpPos, snpChr);
     getGenotype(geno_matrix, geno, snpIDs);
-    cout << string("genotype matrix loaded: "+to_string(geno.size())+","+to_string(geno[0].size())+"\n");
+    // cout << string("genotype matrix loaded: "+to_string(geno.size())+","+to_string(geno[0].size())+"\n");
 }
 string prepareInput::getCisRange(string geneID, vector<uint32_t>& positions)
 { 
@@ -98,7 +101,7 @@ string prepareInput::getCisRange(string geneID, vector<uint32_t>& positions)
     // positions = {geneData.start, geneData.end};
     return geneData.chr;
 }
-vector<uint32_t> prepareInput::getSNPrange(uint32_t start, uint32_t end, string chrnum)
+vector<uint32_t> prepareInput::getSNPrange(uint32_t start, uint32_t end, string chrnum, vector<string>& cisSnpIds)
 { 
     // get snp indices that fall within range
     vector<uint32_t> indices;
@@ -117,6 +120,7 @@ vector<uint32_t> prepareInput::getSNPrange(uint32_t start, uint32_t end, string 
     for (size_t i = 0; i < geno.size(); ++i) {
         if (snpChr[i] == chrnum && snpPos[i] >= lower_bound_value && snpPos[i] <= upper_bound_value) {
             indices.push_back(i);
+            cisSnpIds.push_back(snpIDs[i]);
         }
     }
     // for (auto it = lb_it; it != ub_it; ++it) {
@@ -127,25 +131,25 @@ vector<uint32_t> prepareInput::getSNPrange(uint32_t start, uint32_t end, string 
     //         indices.push_back(i);
     //     }
     // }
-    cout << string("Number of snps in cis range "+to_string(start)+"-"+to_string(end)+": "+to_string(indices.size())+"\n");
+    // cout << string("Number of snps in cis range "+to_string(start)+"-"+to_string(end)+": "+to_string(indices.size())+"\n");
     return indices;
 }
-vector<vector<double>> prepareInput::sliceGeno(vector<uint32_t> positions, string& chr, int32_t missing)
+vector<vector<double>> prepareInput::sliceGeno(vector<uint32_t> positions, string& chr, int32_t missing, vector<string>& cisSNPs)
 {
     uint32_t start = positions[0];
     uint32_t end = positions[1];
-    vector<uint32_t> idx = getSNPrange(start, end, chr);
+    vector<uint32_t> idx = getSNPrange(start, end, chr, cisSNPs);
     vector<vector<double>> slicedmatrix;
     if (idx.size() == 0)
         throw invalid_argument("no indices within range");
-    int head = 0;
+    // int head = 0;
     for (uint32_t index : idx)
     {   
-        if (head < 5)
-        {
-            cout <<string("index: "+to_string(index)+"\t>>"+to_string(geno[index][0])+", "+to_string(geno[index][1])+", "+to_string(geno[index][2])+", "+to_string(geno[index][3])+", "+to_string(geno[index][4])+"\n");
-            head++;
-        }
+        // if (head < 5)
+        // {
+        //     cout <<string("index: "+to_string(index)+"\t>>"+to_string(geno[index][0])+", "+to_string(geno[index][1])+", "+to_string(geno[index][2])+", "+to_string(geno[index][3])+", "+to_string(geno[index][4])+"\n");
+        //     head++;
+        // }
 
 
         // cout << string("index: "+ to_string(index));
@@ -170,6 +174,6 @@ vector<vector<double>> prepareInput::sliceGeno(vector<uint32_t> positions, strin
     }
     cout << "slicing complete\n";
     // TODO: SEGFAULT OCCURS BECAUSE SLICEDMATRIX.SIZE() == 0
-    cout << "slicedmatrix size" << to_string(slicedmatrix.size()) << "\n";
+    // cout << "slicedmatrix size" << to_string(slicedmatrix.size()) << "\n";
     return slicedmatrix;
 }
