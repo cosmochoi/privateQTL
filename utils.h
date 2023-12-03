@@ -22,10 +22,108 @@
 using namespace std;
 using namespace Eigen;
 using namespace NTL;
+typedef Eigen::Matrix <double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixDR;
+class Residualizer {
+public:
+    Residualizer(const vector<vector<double>>& covariates) {
+        // Convert vector of vectors to Eigen matrix
+        MatrixXd C_t = vectorOfVectorsToEigenMatrix(covariates);
+        // Matrix <double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> sliced_geno;
+        // sliced_geno.resize(geno.size(), geno[0].size()/2);
+        // center and orthogonalize
+        MatrixXd test = C_t.rowwise() - C_t.colwise().mean();
+        // cout << "test size:" << test.rows() << ","<<test.cols() <<endl;
+        // HouseholderQR<MatrixDR> qr(C_t.rowwise() - C_t.colwise().mean());
+        // Q_t = qr.householderQ();
+        Eigen::HouseholderQR<MatrixXd> qr(test);
+        // Q_t = qr.householderQ();
+        Q_t = qr.householderQ() * MatrixXd::Identity(test.rows(),test.cols());
+
+        // Eigen::ColPivHouseholderQR<MatrixDR> qr;
+        // qr.compute(C_t.rowwise() - C_t.colwise().mean(), Eigen::ComputeThinU);
+        // MatrixDR Q_reduced_explicit = qr.householderQ();
+
+        // std::cout << "Q_t size: " << Q_t.rows() << "," << Q_t.cols() << std::endl;
+        // for (int i=0; i<5; i++)
+        // {
+        //     for (int j=0; j<5; j++)
+        //     {
+        //         cout << Q_t(i,j) << ", ";
+        //     }
+        //     cout << "\n";
+        // }
+        dof = C_t.rows() - 2 - C_t.cols();
+    }
+    vector<vector<double>> transform(const vector<vector<double>>& M_t, bool center = true) {
+        // Convert vector of vectors to Eigen matrix
+        cout << "start transform function. "<< endl;
+        MatrixXd M_t_matrix = vectorOfVectorsToEigenMatrix(M_t);
+
+        // Residualize rows of M wrt columns of C
+        cout << "befpre M0_t" << endl;
+        MatrixXd M0_t = M_t_matrix.colwise() - M_t_matrix.rowwise().mean();
+        cout << "M0_t made." << endl;
+        if (center) {
+            M0_t -= M0_t * Q_t * Q_t.transpose();
+        } else {
+            M0_t = M_t_matrix - M0_t * Q_t * Q_t.transpose();
+        }
+
+        // Convert Eigen matrix to vector of vectors
+        return eigenMatrixToVectorOfVectors(M0_t);
+    }
+    vector<double> transform(const vector<double>& M_t, bool center = true) {
+    // Convert vector to Eigen row matrix
+        cout << "transform entered." << endl;
+        assert(!M_t.empty()); 
+        Eigen::Map<const Eigen::Matrix<double, 1, Eigen::Dynamic>> M_t_matrix(M_t.data(), 1, M_t.size());
+
+        // Residualize row of M wrt columns of C
+        Eigen::Matrix<double, 1, Eigen::Dynamic> M0_t = M_t_matrix.array() - M_t_matrix.mean();
+        // cout << M0_t.rows()<<","<<M0_t.cols() << "/"<< Q_t.rows() << "," << Q_t.cols() << endl;
+        if (center) {
+            M0_t.noalias() = M0_t - M0_t * Q_t * Q_t.transpose();
+        } else {
+            M0_t.noalias() = M_t_matrix - M0_t * Q_t * Q_t.transpose();
+        }
+
+        // Convert Eigen matrix to vector
+        std::vector<double> result(M0_t.data(), M0_t.data() + M0_t.cols());
+        return result;
+    }
+private:
+    MatrixXd Q_t;
+    int dof;
+
+    // Helper function to convert vector of vectors to Eigen matrix
+    MatrixXd vectorOfVectorsToEigenMatrix(const vector<vector<double>>& input) {
+        MatrixXd result; 
+        result.resize(input.size(), input[0].size());
+        // MatrixXd result(input.size(), input[0].size());
+        for (size_t i = 0; i < input.size(); ++i) {
+            for (size_t j = 0; j < input[i].size(); ++j) {
+                result(i, j) = input[i][j];
+            }
+        }
+        return result;
+    }
+
+    // Helper function to convert Eigen matrix to vector of vectors
+    vector<vector<double>> eigenMatrixToVectorOfVectors(const MatrixXd& input) {
+        vector<vector<double>> result(input.rows(), vector<double>(input.cols()));
+        for (int i = 0; i < input.rows(); ++i) {
+            for (int j = 0; j < input.cols(); ++j) {
+                result[i][j] = input(i, j);
+            }
+        }
+        return result;
+    }
+};
 vector<double> CSVtoVector(string filename);
 vector<double> getRowFromMatrixFile(string& filename, int rowIndex);
 void read_bedfile_row(vector<double>& rowData, string& geneID, const string& filename, int row, int skipcols, bool header);
 vector<vector<double>> getTPMFromMatrixFile(const string& filename, vector<string>& geneID);
+vector<vector<double>> getCovariates(const string& filename);
 vector<vector<uint32_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID);
 vector<uint32_t> ScaleVector(vector<double> &v, int k);
 vector<vector<int32_t>> ScaleVector(vector<vector<double>>& v, int k);
@@ -46,6 +144,7 @@ double getPvalue(double corr, double df);
 double getSlope(double nominal_correlation, double psd, double gsd);
 vector<double> center_normalize(vector<vector<double>>& M);
 double center_normalize_vec(vector<double>& M);
-// void ZZtoEigen(vector<vector<ZZ_p>>& v, MatrixXi& dest1, MatrixXi& dest2);
-// void EigentoZZ(vector<uint32_t>& share1, vector<uint32_t>& share2, vector<vector<ZZ_p>>& dest);
+template <typename T>
+void writematrixToTSV(const vector<vector<T>>& data, const string& name);
+vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index);
 #endif

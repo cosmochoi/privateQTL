@@ -1,5 +1,60 @@
 #include "utils.h"
 
+// class Residualizer {
+// public:
+//     Residualizer(const vector<vector<double>>& covariates) {
+//         // Convert vector of vectors to Eigen matrix
+//         MatrixXd C_t = vectorOfVectorsToEigenMatrix(covariates);
+
+//         // center and orthogonalize
+//         HouseholderQR<MatrixXd> qr(C_t.transpose() - C_t.transpose().colwise().mean());
+//         Q_t = qr.householderQ();
+//         dof = C_t.rows() - 2 - C_t.cols();
+//     }
+
+//     vector<vector<double>> transform(const vector<vector<double>>& M_t, bool center = true) {
+//         // Convert vector of vectors to Eigen matrix
+//         MatrixXd M_t_matrix = vectorOfVectorsToEigenMatrix(M_t);
+
+//         // Residualize rows of M wrt columns of C
+//         MatrixXd M0_t = M_t_matrix.rowwise() - M_t_matrix.colwise().mean();
+//         if (center) {
+//             M0_t -= M0_t * Q_t * Q_t.transpose();
+//         } else {
+//             M0_t -= M0_t * Q_t * Q_t.transpose();
+//         }
+
+//         // Convert Eigen matrix to vector of vectors
+//         return eigenMatrixToVectorOfVectors(M0_t);
+//     }
+
+// private:
+//     MatrixXd Q_t;
+//     int dof;
+
+//     // Helper function to convert vector of vectors to Eigen matrix
+//     MatrixXd vectorOfVectorsToEigenMatrix(const vector<vector<double>>& input) {
+//         MatrixXd result(input.size(), input[0].size());
+//         for (size_t i = 0; i < input.size(); ++i) {
+//             for (size_t j = 0; j < input[i].size(); ++j) {
+//                 result(i, j) = input[i][j];
+//             }
+//         }
+//         return result;
+//     }
+
+//     // Helper function to convert Eigen matrix to vector of vectors
+//     vector<vector<double>> eigenMatrixToVectorOfVectors(const MatrixXd& input) {
+//         vector<vector<double>> result(input.rows(), vector<double>(input.cols()));
+//         for (int i = 0; i < input.rows(); ++i) {
+//             for (int j = 0; j < input.cols(); ++j) {
+//                 result[i][j] = input(i, j);
+//             }
+//         }
+//         return result;
+//     }
+// };
+
 vector<double> CSVtoVector(string filename)
 {
     vector<double> input_vec;
@@ -164,6 +219,46 @@ vector<vector<double>> getTPMFromMatrixFile(const string& filename, vector<strin
     // Close the file after reading
     data.close();
 
+    return rowsData;
+}
+vector<vector<double>> getCovariates(const string& filename) {
+    // cout << "enetered getcovariates.\n";
+    vector<vector<double>> rowsData;
+    ifstream data(filename);
+    string line;
+    // int currentRow = 0;
+
+    // Skip the first row (header)
+    getline(data, line);
+
+    while (getline(data, line)) {
+        stringstream lineStream(line);
+        string cell;
+        // int currentColumn = 0;
+
+        // Skip the first two columns
+        getline(lineStream, cell, '\t');
+        // geneID.push_back(cell);
+        // getline(lineStream, cell, '\t');
+
+        vector<double> rowVector;
+        while (getline(lineStream, cell, '\t')) {
+            try {
+                double entry = stod(cell);
+                rowVector.push_back(entry);
+            } catch (const exception& e) {
+                cerr << "Exception caught: " << e.what() << endl;
+            }
+            // currentColumn++;
+        }
+
+        rowsData.push_back(rowVector);
+        // currentRow++;
+    }
+
+    // Close the file after reading
+    data.close();
+    cout << "leaving getcovariates.\n";
     return rowsData;
 }
 vector<vector<uint32_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID) {
@@ -510,13 +605,13 @@ double center_normalize_vec(vector<double>& row) {
 }
 
 template <typename T>
-void writematrixToTSV(const vector<vector<T>>& data, int startrow, int endrow, const string& name)
+void writematrixToTSV(const vector<vector<T>>& data, const string& name)
 {
-    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + "_row" + std::to_string(startrow) + "_" + std::to_string(endrow) + ".tsv";
+    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name  + ".tsv";
     ofstream file(filename);
     if (file.is_open())
     {
-        for (int i = startrow; i <= endrow && i < data.size(); ++i)
+        for (int i = 0; i < data.size(); ++i)
         {
             for (const T& value : data[i])
             {
