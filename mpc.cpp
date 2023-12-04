@@ -852,12 +852,12 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
         vector<double> unscaledrow, r2row;
         for (size_t j=0; j<row.size(); j++)
         {
-            int32_t unshifted;
-            if (conv<uint32_t>(row[j]) > this->p/2)
-                unshifted = conv<int32_t>(row[j]) - this->p;
+            int64_t unshifted;
+            if (conv<uint64_t>(row[j]) > this->p/2)
+                unshifted = conv<int64_t>(row[j]) - this->p;
             else
-                unshifted = conv<int32_t>(row[j]);
-            double r_nom = static_cast<double>(unshifted)/pow(10,9);
+                unshifted = conv<int64_t>(row[j]);
+            double r_nom = static_cast<double>(unshifted)/pow(10,10);
             unscaledrow.push_back(r_nom);
             r2row.push_back(r_nom*r_nom);
 

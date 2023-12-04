@@ -230,7 +230,7 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
     cout << "Owner established channels with the computing parties.\n";
     NTL::SetSeed((NTL::conv<NTL::ZZ>((long)27))); // Seed change
     vector<vector<double>> pheno;
-    uint32_t p = pow(2,31);
+    uint64_t p = pow(2,35);
     ZZ_p::init(to_ZZ(p)); 
     cout << "P: " << p << endl;
     owner_p1.send(p);
@@ -283,7 +283,7 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         geno_var = center_normalize(geno_res);
         // writeVectorToCSV(geno_var, string("row"+to_string(r)+"_geno_var"));
         // cout << string("first geno var: "+to_string(geno_var[0])+"\n");
-        geno_scaled = ScaleVector(geno_res, pow(10,4));
+        geno_scaled = ScaleVector(geno_res, pow(10,5));
         
         string original = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/zscores.txt");
         vector<double> pre_centered = CSVtoVector(original);
