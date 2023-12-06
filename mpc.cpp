@@ -2,7 +2,7 @@
 
 const static Eigen::IOFormat TSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, "\t", "\n");
 
-vector<ZZ_p> convVec(vector<uint32_t> v){
+vector<ZZ_p> convVec(vector<uint64_t> v){
     vector<ZZ_p> converted(v.size());
     for (int i=0; i<v.size(); i++)
     {
@@ -10,11 +10,11 @@ vector<ZZ_p> convVec(vector<uint32_t> v){
     }
     return converted;
 }
-vector<uint32_t> convVec(vector<ZZ_p> v){
-    vector<uint32_t> converted(v.size());
+vector<uint64_t> convVec(vector<ZZ_p> v){
+    vector<uint64_t> converted(v.size());
     for (int i=0; i<v.size(); i++)
     {
-        converted[i] = conv<uint32_t>(v[i]);
+        converted[i] = conv<uint64_t>(v[i]);
     }
     return converted;
 }
@@ -120,10 +120,10 @@ bool mpc::setupSeeds()
     {
         this->localprng = new PRNG(oc::toBlock(this->pid)); //NEEDS CHANGE
 
-        uint32_t plusSeed = this->localprng->get<uint32_t>();
+        uint64_t plusSeed = this->localprng->get<uint64_t>();
         this->toPlus.send(plusSeed);
 
-        uint32_t minusSeed;
+        uint64_t minusSeed;
         this->fromMinus.recv(minusSeed);
 
         PRNG *wPlus = new PRNG(oc::toBlock(plusSeed));
@@ -152,12 +152,12 @@ void mpc::ready()
 }
 void mpc::receiveSecrets()
 {
-    vector<uint32_t> dest;
+    vector<uint64_t> dest;
     this->dataowner.recv(dest);
     this->n = dest[0]; //number of secrets
     this->lk = dest[1]; //number of bits
     this->inv = dest[3]; //inv 
-    vector<uint32_t> result;
+    vector<uint64_t> result;
     try 
     {
         // receiving shares;
@@ -174,7 +174,7 @@ void mpc::receiveSecrets()
         {   
             // cout << string(to_string(this->pid) + " ready to receive identity and zscores.\n");
             //receiving identity shares
-            vector<uint32_t> identity_result;
+            vector<uint64_t> identity_result;
             this->dataowner.recv(identity_result);
             vector<ZZ_p> identity_temp(identity_result.begin(), identity_result.end());
             swap(this->identity, identity_temp);
@@ -184,7 +184,7 @@ void mpc::receiveSecrets()
             this->dataowner.recv(shiftsize);
             this->shiftsize=shiftsize;
 
-            vector<uint32_t> zscore_result;
+            vector<uint64_t> zscore_result;
             this->dataowner.recv(zscore_result);
             vector<ZZ_p> zscore_temp(zscore_result.begin(), zscore_result.end());
             swap(this->zscores, zscore_temp);
@@ -205,7 +205,7 @@ void mpc::receiveSecrets()
 
 void mpc::assertSize(vector<ZZ_p> pi, string tag) {
     for (ZZ_p z : pi) {
-        uint32_t value = conv<uint32_t>(z);
+        uint64_t value = conv<uint64_t>(z);
         if (value > pi.size() || value < 1) {
             string output = string("[" + to_string(this->pid) + "][" + tag + "] Error! value: " + to_string(value) + " size: " + to_string(pi.size()) + "\n");
             cout << output;
@@ -213,12 +213,12 @@ void mpc::assertSize(vector<ZZ_p> pi, string tag) {
         }
     }    
 }
-vector<uint32_t> mpc::apply_plaintext_perm(vector<uint32_t> rho, vector<uint32_t> sigma)
+vector<uint64_t> mpc::apply_plaintext_perm(vector<uint64_t> rho, vector<uint64_t> sigma)
 {
     //Applying rho on sigma rho o sigma
     if (rho.size() != sigma.size())
         throw invalid_argument("This is regular apply permutation; both pis should be same size.");
-    vector<uint32_t> appliedvec(rho.size());
+    vector<uint64_t> appliedvec(rho.size());
     for (int i=0; i < sigma.size(); i++)
     {
         appliedvec[rho[i]-1] = sigma[i];
@@ -226,7 +226,7 @@ vector<uint32_t> mpc::apply_plaintext_perm(vector<uint32_t> rho, vector<uint32_t
     return appliedvec;
 }
 
-vector<ZZ_p> mpc::Frand(uint32_t bufferSize) 
+vector<ZZ_p> mpc::Frand(uint64_t bufferSize) 
 {
     if (bufferSize <= 1)
     {
@@ -236,22 +236,22 @@ vector<ZZ_p> mpc::Frand(uint32_t bufferSize)
     PRNG &plus_PRNG = *(plus_it->second);
     auto minus_it = this->seedpair.find((this->pid + 2) % 3);
     PRNG &minus_PRNG = *(minus_it->second);
-    vector<uint32_t> pi(2*bufferSize);
-    for (uint32_t i = 0; i < bufferSize; i++)
+    vector<uint64_t> pi(2*bufferSize);
+    for (uint64_t i = 0; i < bufferSize; i++)
     {
         pi[i*2+0] = i + 1;
         pi[i*2+1] = i + 1;
     }
-    for (uint32_t i = bufferSize - 1; i >= 1; i--)
+    for (uint64_t i = bufferSize - 1; i >= 1; i--)
     {
         // random index chosen to be swapped
-        uint32_t j = minus_PRNG.get<uint32_t>() % (i + 1);
-        uint32_t temp = pi[i*2+0];
+        uint64_t j = minus_PRNG.get<uint64_t>() % (i + 1);
+        uint64_t temp = pi[i*2+0];
         pi[i*2+0] = pi[j*2+0];
         pi[j*2+0] = temp;
 
-        uint32_t k = plus_PRNG.get<uint32_t>() % (i + 1);
-        uint32_t temp2 = pi[i*2+1];
+        uint64_t k = plus_PRNG.get<uint64_t>() % (i + 1);
+        uint64_t temp2 = pi[i*2+1];
         pi[i*2+1] = pi[k*2+1];
         pi[k*2+1] = temp2;
     } 
@@ -263,12 +263,12 @@ vector<ZZ_p> mpc::Frand(uint32_t bufferSize)
 vector<ZZ_p> mpc::reveal(vector<ZZ_p>& pi, bool isperm)
 {
     // cout <<"reveal entered.\n";
-    vector<uint32_t> share1;
-    vector<uint32_t> share2;
+    vector<uint64_t> share1;
+    vector<uint64_t> share2;
     for (int i=0; i<pi.size(); i+=2)
     {
-        uint32_t r = conv<uint32_t>(pi[i]);
-        uint32_t q = conv<uint32_t>(pi[i+1]);
+        uint64_t r = conv<uint64_t>(pi[i]);
+        uint64_t q = conv<uint64_t>(pi[i+1]);
         if(r >= this->p) {
             cout << "r too big: " << r << endl;
         }
@@ -280,7 +280,7 @@ vector<ZZ_p> mpc::reveal(vector<ZZ_p>& pi, bool isperm)
     }
     this->toPlus.send(share1);
     this->toMinus.send(share2);
-    vector<uint32_t> receivedMinus, receivedPlus;
+    vector<uint64_t> receivedMinus, receivedPlus;
     this->fromMinus.recv(receivedMinus);
     this->fromPlus.recv(receivedPlus);
     
@@ -301,8 +301,8 @@ vector<ZZ_p> mpc::reveal(vector<ZZ_p>& pi, bool isperm)
     }
 
     vector<ZZ_p> reconstructed;
-    vector<uint32_t> final(share1.size());
-    vector<uint32_t> temp(share1.size());
+    vector<uint64_t> final(share1.size());
+    vector<uint64_t> temp(share1.size());
     if (isperm)
     {
         if (this->pid==0)
@@ -332,7 +332,7 @@ vector<ZZ_p> mpc::reveal(vector<ZZ_p>& pi, bool isperm)
             }
             reconstructed.push_back(conv<ZZ_p>(receivedMinus[i])+conv<ZZ_p>(share1[i])+conv<ZZ_p>(share2[i]));
             // reconstructed.push_back(conv<ZZ_p>(receivedMinus[i]));
-            uint32_t result = conv<uint32_t>(reconstructed[i]);
+            uint64_t result = conv<uint64_t>(reconstructed[i]);
             if (result >= this->p) {
                 cout << "too big! Result: " << result << endl;
             }
@@ -345,22 +345,22 @@ vector<ZZ_p> mpc::reveal(vector<ZZ_p>& pi, bool isperm)
 void mpc::reshare(vector<ZZ_p>& shares, int reshareID)
 {
     vector<ZZ_p> randoms(3);
-    vector<uint32_t> sendvec;
+    vector<uint64_t> sendvec;
     if (reshareID == (this->pid + 1) % 3) // share to plus
     {
         auto minus_it = this->seedpair.find((this->pid + 2) % 3);
         PRNG &minus_PRNG = *(minus_it->second);
         for (int i=0; i<2; i++)
         {
-            randoms[i] = to_ZZ_p(minus_PRNG.get<uint32_t>());
+            randoms[i] = to_ZZ_p(minus_PRNG.get<uint64_t>());
         }
         randoms[2] = -randoms[0]-randoms[1];
         for (int j=0; j<shares.size()/2; j++)
         {
             shares[2*j]+=randoms[this->pid];
             shares[2*j+1]+=randoms[(this->pid +1)%3];
-            sendvec.push_back(conv<uint32_t>(shares[2*j+1]));
-            // this->toPlus.send(conv<uint32_t>(shares[2*j+1]));
+            sendvec.push_back(conv<uint64_t>(shares[2*j+1]));
+            // this->toPlus.send(conv<uint64_t>(shares[2*j+1]));
         }
         this->toPlus.send(sendvec);
     }
@@ -370,21 +370,21 @@ void mpc::reshare(vector<ZZ_p>& shares, int reshareID)
         PRNG &plus_PRNG = *(plus_it->second);
         for (int i=0; i<2; i++)
         {
-            randoms[i] = to_ZZ_p(plus_PRNG.get<uint32_t>());
+            randoms[i] = to_ZZ_p(plus_PRNG.get<uint64_t>());
         }
         randoms[2] = -randoms[0]-randoms[1];
         for (int j=0; j<shares.size()/2; j++)
         {
             shares[2*j]+=randoms[this->pid];
             shares[2*j+1]+=randoms[(this->pid +1)%3];
-            sendvec.push_back(conv<uint32_t>(shares[2*j]));
+            sendvec.push_back(conv<uint64_t>(shares[2*j]));
         }
         this->toMinus.send(sendvec);
     }
     else 
     {
        vector<ZZ_p> newshare(shares.size());
-       vector<uint32_t> minus(shares.size()/2), plus(shares.size()/2);
+       vector<uint64_t> minus(shares.size()/2), plus(shares.size()/2);
        this->fromMinus.recv(minus);
        this->fromPlus.recv(plus);
         for (int i=0; i<shares.size()/2; i++)
@@ -402,14 +402,14 @@ void mpc::reshare(vector<ZZ_p>& shares, int reshareID)
 void mpc::reshareM(vector<vector<ZZ_p>>& shares, int reshareID)
 {
     vector<ZZ_p> randoms(3);
-    vector<vector<uint32_t>> sendvec(shares.size(), vector<uint32_t>(shares[0].size()));
+    vector<vector<uint64_t>> sendvec(shares.size(), vector<uint64_t>(shares[0].size()));
     if (reshareID == (this->pid + 1) % 3) // share to plus
     {
         auto minus_it = this->seedpair.find((this->pid + 2) % 3);
         PRNG &minus_PRNG = *(minus_it->second);
         for (int i=0; i<2; i++)
         {
-            randoms[i] = to_ZZ_p(minus_PRNG.get<uint32_t>());
+            randoms[i] = to_ZZ_p(minus_PRNG.get<uint64_t>());
         }
         randoms[2] = -randoms[0]-randoms[1];
         for (int i=0; i<shares.size(); i++)
@@ -418,7 +418,7 @@ void mpc::reshareM(vector<vector<ZZ_p>>& shares, int reshareID)
             {
                 shares[i][2*j]+=randoms[this->pid];
                 shares[i][2*j+1]+=randoms[(this->pid +1)%3];
-                sendvec[i][j] = conv<uint32_t>(shares[i][2*j+1]);
+                sendvec[i][j] = conv<uint64_t>(shares[i][2*j+1]);
             }
             this->toPlus.send(sendvec[i]); 
         }
@@ -429,7 +429,7 @@ void mpc::reshareM(vector<vector<ZZ_p>>& shares, int reshareID)
         PRNG &plus_PRNG = *(plus_it->second);
         for (int i=0; i<2; i++)
         {
-            randoms[i] = to_ZZ_p(plus_PRNG.get<uint32_t>());
+            randoms[i] = to_ZZ_p(plus_PRNG.get<uint64_t>());
         }
         randoms[2] = -randoms[0]-randoms[1];
         for (int i=0; i<shares.size(); i++)
@@ -438,7 +438,7 @@ void mpc::reshareM(vector<vector<ZZ_p>>& shares, int reshareID)
             {
                 shares[i][2*j]+=randoms[this->pid];
                 shares[i][2*j+1]+=randoms[(this->pid +1)%3];
-                sendvec[i][j] = conv<uint32_t>(shares[i][2*j]);
+                sendvec[i][j] = conv<uint64_t>(shares[i][2*j]);
             }
             this->toMinus.send(sendvec[i]);
         }
@@ -448,8 +448,8 @@ void mpc::reshareM(vector<vector<ZZ_p>>& shares, int reshareID)
        vector<vector<ZZ_p>> newshare(shares.size(), vector<ZZ_p>(shares[0].size()));
         for(int i=0; i<shares.size(); i++)
         {
-            vector<uint32_t> minus(shares[0].size());
-            vector<uint32_t> plus(shares[0].size());
+            vector<uint64_t> minus(shares[0].size());
+            vector<uint64_t> plus(shares[0].size());
             this->fromMinus.recv(minus);
             this->fromPlus.recv(plus);
             for(int j=0; j<shares[0].size()/2; j++)
@@ -471,11 +471,11 @@ vector<ZZ_p> mpc::Fmult(vector<ZZ_p> k_i, vector<ZZ_p> s_i)
     PRNG &plus_PRNG = *(plus_it->second);
     vector<ZZ_p> t_i(2);
     ZZ_p ri = k_i[0]*s_i[0] + k_i[1]*s_i[0] + k_i[0]*s_i[1];
-    ri+=to_ZZ_p(minus_PRNG.get<uint32_t>()); // result + r1 - r2;
-    ri-=to_ZZ_p(plus_PRNG.get<uint32_t>());
+    ri+=to_ZZ_p(minus_PRNG.get<uint64_t>()); // result + r1 - r2;
+    ri-=to_ZZ_p(plus_PRNG.get<uint64_t>());
     t_i[0]=ri;
-    this->toMinus.send(conv<uint32_t>(ri));
-    uint32_t received_data;
+    this->toMinus.send(conv<uint64_t>(ri));
+    uint64_t received_data;
     this->fromPlus.recv(received_data);
     conv(t_i[1], received_data);
     return t_i;
@@ -524,12 +524,12 @@ vector<ZZ_p> mpc::genbitperm(vector<ZZ_p> &keybit)
 vector<ZZ_p> mpc::inversePerm(vector<ZZ_p> pi)
 {
     assertSize(pi, "inversePerm");
-    vector<uint32_t> arr2(pi.size());
+    vector<uint64_t> arr2(pi.size());
     vector<ZZ_p> inverse(pi.size());
-    for (uint32_t i = 0; i < pi.size(); i++)
-        arr2[conv<uint32_t>(pi[i]) - 1] = i + 1;
+    for (uint64_t i = 0; i < pi.size(); i++)
+        arr2[conv<uint64_t>(pi[i]) - 1] = i + 1;
  
-    for (uint32_t i = 0; i < pi.size(); i++)
+    for (uint64_t i = 0; i < pi.size(); i++)
     {
         inverse[i] = conv<ZZ_p>(arr2[i]);
     }
@@ -542,7 +542,7 @@ void mpc::apply_perm_local(bool participate, vector<ZZ_p> &v, vector<ZZ_p> &pi)
     {
         for (ZZ_p z : pi) 
         {
-            uint32_t value = conv<uint32_t>(z);
+            uint64_t value = conv<uint64_t>(z);
             if (value > pi.size()) 
             {
                 cout << "apply_perm_local." << endl;
@@ -556,7 +556,7 @@ void mpc::apply_perm_local(bool participate, vector<ZZ_p> &v, vector<ZZ_p> &pi)
         if (v.size() % 2 != 0)
             throw invalid_argument("v size is not divisible by 2.");
         vector<ZZ_p> v2(v.size());
-        for (uint32_t i = 0; i < v.size()/2; i++)
+        for (uint64_t i = 0; i < v.size()/2; i++)
         {
             if (2 * i + 1 >= v.size()) 
             {
@@ -564,8 +564,8 @@ void mpc::apply_perm_local(bool participate, vector<ZZ_p> &v, vector<ZZ_p> &pi)
             }
             try
             {
-                uint32_t idx1 = conv<uint32_t>((pi[i])-1)*2;
-                uint32_t idx2 = conv<uint32_t>((pi[i])-1)*2+1;
+                uint64_t idx1 = conv<uint64_t>((pi[i])-1)*2;
+                uint64_t idx2 = conv<uint64_t>((pi[i])-1)*2+1;
                 // v2[(pi_i-1)*2] =v[2*i];
                 // v2[(pi_i-1)*2+1]=v[2*i+1];
                 v2[idx1] =v[2*i];
@@ -586,7 +586,7 @@ void mpc::apply_perm_localM(bool participate, vector<vector<ZZ_p>> &v, vector<ZZ
     {
         for (ZZ_p z : pi) 
         {
-            uint32_t value = conv<uint32_t>(z);
+            uint64_t value = conv<uint64_t>(z);
             if (value > pi.size()) 
             {
                 cout << "apply_perm_local." << endl;
@@ -602,10 +602,10 @@ void mpc::apply_perm_localM(bool participate, vector<vector<ZZ_p>> &v, vector<ZZ
         vector<vector<ZZ_p>> v2(v.size(), vector<ZZ_p>(v[0].size()));
         for (size_t i=0; i<v.size(); i++)
         {
-            uint32_t idx = conv<uint32_t>(pi[i]-1);
+            uint64_t idx = conv<uint64_t>(pi[i]-1);
             v2[idx] = v[i];
         }
-        // for (uint32_t i = 0; i < v.size()/2; i++)
+        // for (uint64_t i = 0; i < v.size()/2; i++)
         // {
         //     if (2 * i + 1 >= v.size()) 
         //     {
@@ -613,8 +613,8 @@ void mpc::apply_perm_localM(bool participate, vector<vector<ZZ_p>> &v, vector<ZZ
         //     }
         //     try
         //     {
-        //         uint32_t idx1 = conv<uint32_t>((pi[i])-1)*2;
-        //         uint32_t idx2 = conv<uint32_t>((pi[i])-1)*2+1;
+        //         uint64_t idx1 = conv<uint64_t>((pi[i])-1)*2;
+        //         uint64_t idx2 = conv<uint64_t>((pi[i])-1)*2+1;
         //         // v2[(pi_i-1)*2] =v[2*i];
         //         // v2[(pi_i-1)*2+1]=v[2*i+1];
         //         v2[idx1] =v[2*i];
@@ -632,17 +632,18 @@ void mpc::apply_perm_localM(bool participate, vector<vector<ZZ_p>> &v, vector<ZZ
 void mpc::permutPheno(int permut)
 {
 
-    vector<uint32_t> normalized_pheno;
+    vector<uint64_t> normalized_pheno;
     this->dataowner.recv(normalized_pheno);
     vector<ZZ_p> pheno = convVec(normalized_pheno);
     this->permutMat.push_back(pheno);
-        for (size_t i=0; i<permut; i++)
-        {
-            vector<ZZ_p> permuted(pheno);
-            vector<ZZ_p> pi=Frand(pheno.size()/2);
-            shuffle(pi,permuted);
-            this->permutMat.push_back(permuted);
-        }
+    for (size_t i=0; i<permut; i++)
+    {
+        vector<ZZ_p> permuted(pheno);
+        vector<ZZ_p> pi=Frand(pheno.size()/2);
+        shuffle(pi,permuted);
+        this->permutMat.push_back(permuted);
+    }
+    // reveal_matrix(this->permutMat, this->permutMat, "permutpheno");
 }
 void mpc::shuffle(vector<ZZ_p> &pi, vector<ZZ_p> &a)
 {
@@ -774,11 +775,11 @@ void mpc::reveal_matrix(vector<vector<ZZ_p>>& geno, vector<vector<ZZ_p>>& pheno,
         vector<double> unscaledrow;
         for (size_t j=0; j<row.size(); j++)
         {
-            int32_t unshifted;
-            if (conv<uint32_t>(row[j]) > this->p/2)
-                unshifted = conv<int32_t>(row[j]) - this->p;
+            int64_t unshifted;
+            if (conv<uint64_t>(row[j]) > this->p/2)
+                unshifted = conv<int64_t>(row[j]) - this->p;
             else
-                unshifted = conv<int32_t>(row[j]);
+                unshifted = conv<int64_t>(row[j]);
             double r_nom = static_cast<double>(unshifted)/pow(10,5);
             unscaledrow.push_back(r_nom);
             // r2row.push_back(r_nom*r_nom);
@@ -796,12 +797,12 @@ void mpc::reveal_matrix(vector<vector<ZZ_p>>& geno, vector<vector<ZZ_p>>& pheno,
         vector<double> unscaledrow;
         for (size_t j=0; j<row.size(); j++)
         {
-            int32_t unshifted;
-            if (conv<uint32_t>(row[j]) > this->p/2)
-                unshifted = conv<int32_t>(row[j]) - this->p;
+            int64_t unshifted;
+            if (conv<uint64_t>(row[j]) > this->p/2)
+                unshifted = conv<int64_t>(row[j]) - this->p;
             else
-                unshifted = conv<int32_t>(row[j]);
-            double r_nom = static_cast<double>(unshifted)/pow(10,4);
+                unshifted = conv<int64_t>(row[j]);
+            double r_nom = static_cast<double>(unshifted)/pow(10,5);
             unscaledrow.push_back(r_nom);
             // r2row.push_back(r_nom*r_nom);
 
@@ -820,9 +821,9 @@ void mpc::reveal_matrix(vector<vector<ZZ_p>>& geno, vector<vector<ZZ_p>>& pheno,
     if (this->pid ==0)
     {
         cout << string("\nPlaintext Eigen matmult took " + to_string(totaldurationInminutes)+" minutes.") << endl;
-        // writeEigenToTSV(sliced_geno, "pQTL_geno");
-        // writeEigenToTSV(pheno_mat, "pQTL_pheno");
-        // writeEigenToTSV(mult_res, "pQTL_mmresult");
+        // writeEigenToTSV(sliced_geno, string(name + "_pQTL_geno"));
+        // writeEigenToTSV(pheno_mat, string(name + "_pQTL_pheno"));
+        // writeEigenToTSV(mult_res, string(name + "_pQTL_mmresult"));
     }
         
 }
@@ -876,6 +877,7 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
         // writematrixToTSV(matgeno, "bloodgeno");
         // writematrixToTSV(matcorr, "bloodcorr");
         this->dataowner.recv(std_ratio);
+        // print_vector(std_ratio);
         int buffersize;
         this->dataowner.recv(buffersize);
         char buffer[buffersize];
@@ -934,6 +936,7 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
         vector < double > permPvalues;
         double init_dof = this->permutMat[0].size()/2 - 2;
         double mean = 0.0, variance = 0.0, beta_shape1 = 1.0, beta_shape2 = 1.0;
+        // print_vector(r_perm);
         if (doublevariance(r_perm, doublemean(r_perm)) != 0.0) 
         {
             learnDF(r_perm, init_dof);
@@ -972,6 +975,7 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
         cout << string("\n----------------------------\nGene: "+cisVar[0]+"\nVariant: "+cisVar[ix]+
         "\nidx: "+to_string(ix)+
         "\nstd_ratio: "+to_string(std_ratio[ix])+
+        "\nr_nom: "+to_string(matcorr[ix][0]) +
         "\nr2_nom: "+to_string(r2_value)+
         "\ndof: "+to_string(dof)+"\nslope: "+to_string(slope)+"\ntstat: "+to_string(sqrt(tstat2))+"\nslope_se: "+to_string(slope_se)+
         "\npval_true: "+to_string(pval_true_df)+"\npval_nom: "+to_string(pval_nom)+
@@ -1128,7 +1132,7 @@ void mpc::genperm(int row, string norm_method, int permut)
 }
 void mpc::receivePheno()
 {
-    vector<uint32_t> mat2;
+    vector<uint64_t> mat2;
     this->dataowner.recv(this->shape);
     this->dataowner.recv(mat2);
     for (int j=0; j<this->shape[0]; j++)
@@ -1157,10 +1161,10 @@ vector<vector<ZZ_p>> transpose(vector<vector<ZZ_p>>& matrix) {
 void mpc::logRatio()
 {
     // pseudo-reference is average log counts across all samples, for each gene
-    uint32_t gene = this->pheno.size();
-    uint32_t sample = this->pheno[0].size();
+    uint64_t gene = this->pheno.size();
+    uint64_t sample = this->pheno[0].size();
     // cout << string(to_string(this->pheno.size())+" / "+ to_string(this->pheno[0].size())+"\n");
-    vector<uint32_t> sumvec;
+    vector<uint64_t> sumvec;
     vector<double> pseudoref;
     vector<vector<double>> ratios(this->pheno.size(), vector<double>(this->pheno[0].size()));
     vector<double> sendback;
@@ -1172,12 +1176,12 @@ void mpc::logRatio()
             sum+=this->pheno[i][j];
         }
 
-        // double avg = conv<uint32_t>(sum)/static_cast<double>(sample);
+        // double avg = conv<uint64_t>(sum)/static_cast<double>(sample);
         // cout <<sum<<endl;
-        sumvec.push_back(conv<uint32_t>(sum));
+        sumvec.push_back(conv<uint64_t>(sum));
     }
     // print_vector(sumvec);
-    vector<uint32_t> v1, v2;
+    vector<uint64_t> v1, v2;
     this->toMinus.send(sumvec);
     this->toPlus.send(sumvec);
     this->fromMinus.recv(v1);
@@ -1188,7 +1192,7 @@ void mpc::logRatio()
         totalsum+=to_ZZ_p(v1[i]);
         totalsum+=to_ZZ_p(v2[i]);
         // cout <<totalsum;
-        pseudoref.push_back(conv<uint32_t>(totalsum)/static_cast<double>(sample));
+        pseudoref.push_back(conv<uint64_t>(totalsum)/static_cast<double>(sample));
     }
     // vector<ZZ_p> pseudosum = reveal(pseudoref,false);
     // print_vector(pseudoref);
@@ -1196,7 +1200,7 @@ void mpc::logRatio()
     // {
     //     for(int j=0; j<sample; j++)
     //     {
-    //         ratios[i][j] = conv<uint32_t>(this->pheno[i][j]) - pseudoref[i];
+    //         ratios[i][j] = conv<uint64_t>(this->pheno[i][j]) - pseudoref[i];
     //         sendback.push_back(ratios[i][j]);
     //     }
     // }
@@ -1206,7 +1210,7 @@ void mpc::logRatio()
 
 void mpc::receiveGeno()
 {
-    vector<uint32_t> mat1, genoshape;
+    vector<uint64_t> mat1, genoshape;
     this->dataowner.recv(genoshape);
     // this->shape.push_back(genoshape);
     this->dataowner.recv(mat1);
@@ -1260,12 +1264,12 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
     auto plus_it = this->seedpair.find((this->pid + 1) % 3);
     PRNG &minus_PRNG = *(minus_it->second);
     PRNG &plus_PRNG = *(plus_it->second);
-    // vector<uint32_t> to_send;
+    // vector<uint64_t> to_send;
     const int nnRows = mat1.size();
     const int nnCols = mat1[0].size() / 2;
 
     MatrixXi mat1_share1, mat1_share2, mat2_share1, mat2_share2;
-    // // Eigen::Matrix <uint32_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mat1_share2;
+    // // Eigen::Matrix <uint64_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mat1_share2;
     mat1_share1.resize(mat1.size(), mat1[0].size()/2);
     mat1_share2.resize(mat1.size(), mat1[0].size()/2);
     // mat2_share1.resize(mat2.size(), mat2[0].size()/2);
@@ -1297,34 +1301,34 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
     MatrixXi random1, random2;
     random1.resize(result1.rows(), result1.cols());
     random2.resize(result1.rows(), result1.cols());
-    random1.setConstant(minus_PRNG.get<uint32_t>()%this->p);
-    random2.setConstant(plus_PRNG.get<uint32_t>()%this->p);
+    random1.setConstant(minus_PRNG.get<uint64_t>()%this->p);
+    random2.setConstant(plus_PRNG.get<uint64_t>()%this->p);
     // if (this->pid ==0)
     //     cout << "finished. Adding randomness..." << flush;
     result1 = result1+random1-random2;
-    // result1 = (result1.array()+(minus_PRNG.get<uint32_t>()%this->p) - (plus_PRNG.get<uint32_t>()%this->p)).matrix();
+    // result1 = (result1.array()+(minus_PRNG.get<uint64_t>()%this->p) - (plus_PRNG.get<uint64_t>()%this->p)).matrix();
     // if (this->pid ==0)
     //     cout << "finished. Flattening to send vector..." << flush;
-    vector<uint32_t> to_send(result1.data(), result1.data()+result1.size());
+    vector<uint64_t> to_send(result1.data(), result1.data()+result1.size());
 
     // if (this->pid ==0)
     //     cout << string("finished with vector size:"+ to_string(to_send.size()) +".\nSending and receiving...") << endl;
     
     //////////
     const size_t chunkSize = 2000000;
-    vector<uint32_t> received_data;
+    vector<uint64_t> received_data;
     for (size_t i = 0; i < to_send.size(); i += chunkSize) {
         size_t remaining = min(chunkSize, to_send.size() - i);
-        vector<uint32_t> chunk_send(to_send.begin() + i, to_send.begin() + i + remaining);
+        vector<uint64_t> chunk_send(to_send.begin() + i, to_send.begin() + i + remaining);
         // Send 'to_send' in chunks of size 500 (or less if remaining is less than 500)
         this->toMinus.send(chunk_send);
-        vector<uint32_t> to_receive;
+        vector<uint64_t> to_receive;
         this->fromPlus.recv(to_receive);
         received_data.insert(received_data.end(), to_receive.begin(), to_receive.end());
         if(this->pid == 0)
             cout << "\tSent and received " << remaining << " elements in this chunk." << endl;
     }
-    // vector<uint32_t> to_receive;
+    // vector<uint64_t> to_receive;
     
     // this->toMinus.send(to_send);
     // cout << string("\n"+to_string(this->pid)+" sent vector.\n");

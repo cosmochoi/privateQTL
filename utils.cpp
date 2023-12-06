@@ -1,61 +1,9 @@
 #include "utils.h"
 
-// class Residualizer {
-// public:
-//     Residualizer(const vector<vector<double>>& covariates) {
-//         // Convert vector of vectors to Eigen matrix
-//         MatrixXd C_t = vectorOfVectorsToEigenMatrix(covariates);
 
-//         // center and orthogonalize
-//         HouseholderQR<MatrixXd> qr(C_t.transpose() - C_t.transpose().colwise().mean());
-//         Q_t = qr.householderQ();
-//         dof = C_t.rows() - 2 - C_t.cols();
-//     }
 
-//     vector<vector<double>> transform(const vector<vector<double>>& M_t, bool center = true) {
-//         // Convert vector of vectors to Eigen matrix
-//         MatrixXd M_t_matrix = vectorOfVectorsToEigenMatrix(M_t);
 
-//         // Residualize rows of M wrt columns of C
-//         MatrixXd M0_t = M_t_matrix.rowwise() - M_t_matrix.colwise().mean();
-//         if (center) {
-//             M0_t -= M0_t * Q_t * Q_t.transpose();
-//         } else {
-//             M0_t -= M0_t * Q_t * Q_t.transpose();
-//         }
-
-//         // Convert Eigen matrix to vector of vectors
-//         return eigenMatrixToVectorOfVectors(M0_t);
-//     }
-
-// private:
-//     MatrixXd Q_t;
-//     int dof;
-
-//     // Helper function to convert vector of vectors to Eigen matrix
-//     MatrixXd vectorOfVectorsToEigenMatrix(const vector<vector<double>>& input) {
-//         MatrixXd result(input.size(), input[0].size());
-//         for (size_t i = 0; i < input.size(); ++i) {
-//             for (size_t j = 0; j < input[i].size(); ++j) {
-//                 result(i, j) = input[i][j];
-//             }
-//         }
-//         return result;
-//     }
-
-//     // Helper function to convert Eigen matrix to vector of vectors
-//     vector<vector<double>> eigenMatrixToVectorOfVectors(const MatrixXd& input) {
-//         vector<vector<double>> result(input.rows(), vector<double>(input.cols()));
-//         for (int i = 0; i < input.rows(); ++i) {
-//             for (int j = 0; j < input.cols(); ++j) {
-//                 result[i][j] = input(i, j);
-//             }
-//         }
-//         return result;
-//     }
-// };
-
-vector<double> CSVtoVector(string filename)
+vector<double> CSVtoVector(const string &filename)
 {
     vector<double> input_vec;
     // vector<string> string_vector;
@@ -71,6 +19,22 @@ vector<double> CSVtoVector(string filename)
         input_vec.push_back(entry);
         // cout << weight << " ";
     }
+    return input_vec;
+}
+vector<string> TSVtoVector(const string &filename) {
+    vector<string> input_vec;
+    ifstream data(filename);
+    string line;
+
+    while (getline(data, line)) {
+        istringstream iss(line);
+        string token;
+
+        while (getline(iss, token, '\t')) {
+            input_vec.push_back(token);
+        }
+    }
+
     return input_vec;
 }
 vector<double> getRowFromMatrixFile(string& filename, int rowIndex) {
@@ -261,8 +225,8 @@ vector<vector<double>> getCovariates(const string& filename) {
     cout << "leaving getcovariates.\n";
     return rowsData;
 }
-vector<vector<uint32_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID) {
-    vector<vector<uint32_t>> rowsData;
+vector<vector<uint64_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID) {
+    vector<vector<uint64_t>> rowsData;
     ifstream data(filename);
     string line;
     // int currentRow = 0;
@@ -280,10 +244,10 @@ vector<vector<uint32_t>> getCountFromMatrixFile(const string& filename, vector<s
         geneID.push_back(cell);
         getline(lineStream, cell, '\t');
 
-        vector<uint32_t> rowVector;
+        vector<uint64_t> rowVector;
         while (getline(lineStream, cell, '\t')) {
             try {
-                uint32_t entry = stoi(cell);
+                uint64_t entry = stoi(cell);
                 rowVector.push_back(entry);
             } catch (const exception& e) {
                 cerr << "Exception caught: " << e.what() << endl;
@@ -300,16 +264,16 @@ vector<vector<uint32_t>> getCountFromMatrixFile(const string& filename, vector<s
 
     return rowsData;
 }
-vector<uint32_t> ScaleVector(vector<double> &v, int k)
+vector<uint64_t> ScaleVector(vector<double> &v, int k)
 {
-    vector<uint32_t> intvec(v.size(), 0);
+    vector<uint64_t> intvec(v.size(), 0);
     for (int i = 0; i < v.size(); ++i)
         intvec[i] = v[i] * k;
     return intvec;
 }
-vector<vector<int32_t>> ScaleVector(vector<vector<double>>& v, int k)
+vector<vector<int64_t>> ScaleVector(vector<vector<double>>& v, int k)
 {
-    vector<vector<int32_t>> intvec(v.size(), vector<int32_t>(v[0].size()));
+    vector<vector<int64_t>> intvec(v.size(), vector<int64_t>(v[0].size()));
     for (int i=0; i<v.size(); i++)
     {
         for (int j=0; j<v[0].size(); j++)
@@ -319,40 +283,40 @@ vector<vector<int32_t>> ScaleVector(vector<vector<double>>& v, int k)
     }
     return intvec;
 }
-vector<int32_t> ScaleVector_signed(vector<double> &v, int k)
+vector<int64_t> ScaleVector_signed(vector<double> &v, int k)
 {
-    vector<int32_t> intvec(v.size(), 0);
+    vector<int64_t> intvec(v.size(), 0);
     for (int i = 0; i < v.size(); ++i)
         intvec[i] = v[i] * k;
     return intvec;
 }
 
 
-vector<double> UnscaleVector_signed(vector<int32_t> &v, int k)
+vector<double> UnscaleVector_signed(vector<int64_t> &v, int k)
 {
     vector<double> intvec(v.size(), 0);
     for (int i = 0; i < v.size(); ++i)
         intvec[i] = static_cast<double>(v[i]) / static_cast<double>(k);
     return intvec;
 }
-vector<uint32_t> ShiftVector(vector<int32_t>& vec, uint32_t number) 
+vector<uint64_t> ShiftVector(vector<int64_t>& vec, uint64_t number) 
 {
-    vector<uint32_t> shifted(vec.size());
-    int32_t shiftedValue;
+    vector<uint64_t> shifted(vec.size());
+    int64_t shiftedValue;
     for (size_t i = 0; i < vec.size(); ++i) {
         if (vec[i]<0)
             shiftedValue = vec[i] + number;
         else
             shiftedValue = vec[i];
-        shifted[i] = static_cast<uint32_t>(shiftedValue);
+        shifted[i] = static_cast<uint64_t>(shiftedValue);
     }
     return shifted;
 }
 
-vector<vector<uint32_t>> ShiftVector(vector<vector<int32_t>>& vec, uint32_t number) 
+vector<vector<uint64_t>> ShiftVector(vector<vector<int64_t>>& vec, uint64_t number) 
 {
-    vector<vector<uint32_t>> shifted(vec.size(), vector<uint32_t>(vec[0].size()));
-    int32_t shiftedValue;
+    vector<vector<uint64_t>> shifted(vec.size(), vector<uint64_t>(vec[0].size()));
+    int64_t shiftedValue;
     for (size_t i = 0; i < vec.size(); ++i) {
         for (size_t j=0; j< vec[0].size();j++)
         {
@@ -363,28 +327,28 @@ vector<vector<uint32_t>> ShiftVector(vector<vector<int32_t>>& vec, uint32_t numb
             else{
                 shiftedValue = vec[i][j];
             }
-            shifted[i][j] = static_cast<uint32_t>(shiftedValue);
+            shifted[i][j] = static_cast<uint64_t>(shiftedValue);
         }
         
     }
     return shifted;
 }
 
-vector<int32_t> UnshiftVector(vector<uint32_t>& shifted, uint32_t number)
+vector<int64_t> UnshiftVector(vector<uint64_t>& shifted, uint64_t number)
 {
-    vector<int32_t> unshifted(shifted.size());
+    vector<int64_t> unshifted(shifted.size());
     for (size_t i = 0; i < shifted.size(); ++i) {
         if (shifted[i] > number/2)
-            unshifted[i] = static_cast<int32_t>(shifted[i]) - number;
+            unshifted[i] = static_cast<int64_t>(shifted[i]) - number;
         else
-            unshifted[i] = static_cast<int32_t>(shifted[i]);
-        // unshifted[i] = static_cast<int32_t>(shiftedValue);
+            unshifted[i] = static_cast<int64_t>(shifted[i]);
+        // unshifted[i] = static_cast<int64_t>(shiftedValue);
     }
     return unshifted;
 }
-uint32_t nearestPowerOf2(int N)
+uint64_t nearestPowerOf2(int N)
 {
-    uint32_t a = log2(N);
+    uint64_t a = log2(N);
  
     // if (pow(2, a) == N)
     //     return N;
@@ -466,6 +430,16 @@ double doublevariance(vector < double > & X, double mean) {
     variance /= (X.size() - 1);
     return variance;
 }
+struct data_to_function {
+	int n;
+	double * C;
+
+	data_to_function (int _n, double * _C) {
+		n = _n;
+		C = _C;
+	}
+
+};
 double degreeOfFreedom(const gsl_vector *v, void *params) {
     pair<vector<double>*, double>* p = static_cast<pair<vector<double>*, double>*>(params);	
     vector<double>& corr = *(p->first);
@@ -538,6 +512,8 @@ double getPvalueFromTstat2(double tstat2, double df) {
     return pf(tstat2, 1, df, 0, 0);
 }
 double getPvalue(double corr, double df) {
+    assert(corr != 1 && corr != -1);
+    assert(df * corr * corr != (1 - corr * corr));
     return pf(df * corr * corr / (1 - corr * corr), 1, df,0,0);
 }
 double getSlope(double nominal_correlation, double psd, double gsd) {
@@ -604,8 +580,8 @@ double center_normalize_vec(vector<double>& row) {
     return row_variance;
 }
 
-template <typename T>
-void writematrixToTSV(const vector<vector<T>>& data, const string& name)
+// template <typename T>
+void writematrixToTSV(const vector<vector<double>>& data, const string& name)
 {
     string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name  + ".tsv";
     ofstream file(filename);
@@ -613,7 +589,7 @@ void writematrixToTSV(const vector<vector<T>>& data, const string& name)
     {
         for (int i = 0; i < data.size(); ++i)
         {
-            for (const T& value : data[i])
+            for (const double& value : data[i])
             {
                 file << value << "\t";
             }

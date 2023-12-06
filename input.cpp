@@ -16,9 +16,6 @@ void getGenotype(const string& filename, vector<vector<double>>& geno, vector<st
         
         stringstream lineStream(line);
         string cell;
-        // int currentColumn = 0;
-
-        // Skip the first two columns
         getline(lineStream, cell, '\t');
         snpID.push_back(cell);
         // getline(lineStream, cell, '\t');
@@ -31,11 +28,8 @@ void getGenotype(const string& filename, vector<vector<double>>& geno, vector<st
             } catch (const exception& e) {
                 cerr << "Exception caught: " << e.what() << endl;
             }
-            // currentColumn++;
         }
-
         rowsData.push_back(rowVector);
-        // currentRow++;
     }
 
     // Close the file after reading
@@ -55,8 +49,12 @@ unordered_map<string, GeneData> readDataFile(string& filename) {
     while (getline(data, line)) {
         istringstream lineStream(line);
         string geneID, chr;
-        uint32_t start, end;
-        lineStream >> geneID >> chr >> start >> end;
+        uint64_t start, end;
+        lineStream >> geneID>> chr;
+        if (chr.size() >= 3 && chr.substr(0, 3) == "chr") {
+            chr = chr.substr(3); // Strip "chr" from the beginning
+        }
+        lineStream >> start >> end;
         GeneData geneData;
         geneData.chr = chr;
         geneData.start = start;
@@ -68,7 +66,7 @@ unordered_map<string, GeneData> readDataFile(string& filename) {
     return geneMap;
 }
 
-void getSNPpos(string& geno_pos, vector<uint32_t>& positions, vector<string>& chrpos)
+void getSNPpos(string& geno_pos, vector<uint64_t>& positions, vector<string>& chrpos)
 {
     ifstream data(geno_pos);
     string line;
@@ -78,13 +76,13 @@ void getSNPpos(string& geno_pos, vector<uint32_t>& positions, vector<string>& ch
     {
         istringstream lineStream(line);
         string snpID, chr;
-        uint32_t pos;
+        uint64_t pos;
         lineStream >> snpID >> chr >> pos;
         positions.push_back(pos); //ordered positions of SNPs
         chrpos.push_back(chr);
     }
 }
-prepareInput::prepareInput(string& pheno_pos, string& geno_matrix, string& geno_pos, uint32_t window)
+prepareInput::prepareInput(string& pheno_pos, string& geno_matrix, string& geno_pos, uint64_t window)
 {
     ciswindow = window;
     genePos = readDataFile(pheno_pos);
@@ -92,7 +90,7 @@ prepareInput::prepareInput(string& pheno_pos, string& geno_matrix, string& geno_
     getGenotype(geno_matrix, geno, snpIDs);
     // cout << string("genotype matrix loaded: "+to_string(geno.size())+","+to_string(geno[0].size())+"\n");
 }
-string prepareInput::getCisRange(string geneID, vector<uint32_t>& positions)
+string prepareInput::getCisRange(string geneID, vector<uint64_t>& positions)
 { 
     // get cis range based on gene position
     const GeneData& geneData = genePos[geneID];
@@ -101,30 +99,32 @@ string prepareInput::getCisRange(string geneID, vector<uint32_t>& positions)
     // positions = {geneData.start, geneData.end};
     return geneData.chr;
 }
-vector<uint32_t> prepareInput::getSNPrange(uint32_t start, uint32_t end, string chrnum, vector<string>& cisSnpIds)
+vector<uint64_t> prepareInput::getSNPrange(uint64_t start, uint64_t end, string chrnum, vector<string>& cisSnpIds)
 { 
     // get snp indices that fall within range
-    vector<uint32_t> indices;
-    // cout << string("snpPos size: "+to_string(snpPos.size())+"\n");
-    // cout << string("snpChr size: "+to_string(snpChr.size())+"\n");
-    // cout << string("example snpPos: "+to_string(snpPos[0])+"\n");
-    // cout << string("example snpChr: "+snpChr[0]+"\n");
-    auto lb_it = lower_bound(snpPos.begin(), snpPos.end(), static_cast<int32_t>(start) - static_cast<int32_t>(ciswindow));
+    vector<uint64_t> indices;
+    auto lb_it = lower_bound(snpPos.begin(), snpPos.end(), static_cast<int64_t>(start) - static_cast<int64_t>(ciswindow));
     auto ub_it = upper_bound(snpPos.begin(), snpPos.end(), end + ciswindow);
 
     // Get the actual lower bound value in snpPos vector
-    uint32_t lower_bound_value = (lb_it != snpPos.end()) ? *lb_it : *min_element(snpPos.begin(), snpPos.end());
+    uint64_t lower_bound_value = (lb_it != snpPos.end()) ? *lb_it : *min_element(snpPos.begin(), snpPos.end());
 
     // Get the actual upper bound value in snpPos vector
-    uint32_t upper_bound_value = (ub_it != snpPos.end()) ? *ub_it : *max_element(snpPos.begin(), snpPos.end());
+    uint64_t upper_bound_value = (ub_it != snpPos.end()) ? *ub_it : *max_element(snpPos.begin(), snpPos.end());
     for (size_t i = 0; i < geno.size(); ++i) {
-        if (snpChr[i] == chrnum && snpPos[i] >= lower_bound_value && snpPos[i] <= upper_bound_value) {
+        // if (snpChr[i] == chrnum && snpPos[i] >= lower_bound_value && snpPos[i] <= upper_bound_value) {
+        //     indices.push_back(i);
+        //     cisSnpIds.push_back(snpIDs[i]);
+        // }
+        int64_t cisdistance = snpPos[i] - start;
+        if(abs(cisdistance)<=ciswindow && snpChr[i] == chrnum)
+        {
             indices.push_back(i);
             cisSnpIds.push_back(snpIDs[i]);
         }
     }
     // for (auto it = lb_it; it != ub_it; ++it) {
-    //     uint32_t i = static_cast<uint32_t>(distance(snpPos.begin(), it));
+    //     uint64_t i = static_cast<uint64_t>(distance(snpPos.begin(), it));
     //     if (typeid(snpChr[i]).name() != typeid(std::string).name())
     //         throw invalid_argument("wrong data type.");
     //     if (snpChr[i] == chrnum) {
@@ -134,16 +134,16 @@ vector<uint32_t> prepareInput::getSNPrange(uint32_t start, uint32_t end, string 
     // cout << string("Number of snps in cis range "+to_string(start)+"-"+to_string(end)+": "+to_string(indices.size())+"\n");
     return indices;
 }
-vector<vector<double>> prepareInput::sliceGeno(vector<uint32_t> positions, string& chr, int32_t missing, vector<string>& cisSNPs)
+vector<vector<double>> prepareInput::sliceGeno(vector<uint64_t> positions, string& chr, int64_t missing, vector<string>& cisSNPs)
 {
-    uint32_t start = positions[0];
-    uint32_t end = positions[1];
-    vector<uint32_t> idx = getSNPrange(start, end, chr, cisSNPs);
+    uint64_t start = positions[0];
+    uint64_t end = positions[1];
+    vector<uint64_t> idx = getSNPrange(start, end, chr, cisSNPs);
     vector<vector<double>> slicedmatrix;
     if (idx.size() == 0)
         throw invalid_argument("no indices within range");
     // int head = 0;
-    for (uint32_t index : idx)
+    for (uint64_t index : idx)
     {   
         // if (head < 5)
         // {
@@ -177,3 +177,4 @@ vector<vector<double>> prepareInput::sliceGeno(vector<uint32_t> positions, strin
     // cout << "slicedmatrix size" << to_string(slicedmatrix.size()) << "\n";
     return slicedmatrix;
 }
+

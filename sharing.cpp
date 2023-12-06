@@ -7,7 +7,7 @@
 #include <sys/resource.h>
 struct rusage r_usage;
 
-void bitdecompose(vector<uint32_t> &secrets, vector<BitVector> &bitInput)
+void bitdecompose(vector<uint64_t> &secrets, vector<BitVector> &bitInput)
 {
     // vector<BitVector> bitInput;
     for (int i = 0; i < secrets.size(); i++)
@@ -176,7 +176,7 @@ void sample_QN(vector<vector<double>>& phen_matrix, vector<vector<size_t>>& rank
     // return phen_matrix;
 }
 
-vector<vector<double>> deseq2_cpm(vector<vector<uint32_t>>& counts_df) {
+vector<vector<double>> deseq2_cpm(vector<vector<uint64_t>>& counts_df) {
     int numGenes = counts_df.size();
     int numSamples = counts_df[0].size();
 
@@ -230,7 +230,7 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
     cout << "Owner established channels with the computing parties.\n";
     NTL::SetSeed((NTL::conv<NTL::ZZ>((long)27))); // Seed change
     vector<vector<double>> pheno;
-    uint32_t p = pow(2,24);
+    uint64_t p = pow(2,34);
     ZZ_p::init(to_ZZ(p)); 
     owner_p1.send(p);
     owner_p2.send(p);
@@ -256,25 +256,25 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
     else if (norm_method == "deseq2")
     {
         cout << "Deseq2 normalization executing... ";
-        vector<vector<uint32_t>> testg = {{1,2,3,4},{5,6,1,2},{3,4,5,6}};
+        vector<vector<uint64_t>> testg = {{1,2,3,4},{5,6,1,2},{3,4,5,6}};
         // string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/GTEx_Analysis_gene_counts_matched_filtered.gct";
         string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/blood_reads_matched_filtered.tsv";
-        vector<vector<uint32_t>> testp = getCountFromMatrixFile(matched,geneID);
+        vector<vector<uint64_t>> testp = getCountFromMatrixFile(matched,geneID);
         vector<vector<double>> cpm_df = deseq2_cpm(testp);
 
-        vector<vector<uint32_t>> phenoshares;
+        vector<vector<uint64_t>> phenoshares;
         for (int i = 0; i < 3; i++) {
-            phenoshares.push_back(vector<uint32_t>());
+            phenoshares.push_back(vector<uint64_t>());
         }
 
-        uint32_t testp_row = cpm_df.size();
-        uint32_t testp_col = cpm_df[0].size();
-        // uint32_t testg_row = testg.size();
-        // uint32_t testg_col = testg[0].size();
+        uint64_t testp_row = cpm_df.size();
+        uint64_t testp_col = cpm_df[0].size();
+        // uint64_t testg_row = testg.size();
+        // uint64_t testg_col = testg[0].size();
         vector<int> exclude;
         for (int i=0; i<cpm_df.size(); i++)
         {
-            vector<uint32_t> share1_row, share2_row, share3_row;
+            vector<uint64_t> share1_row, share2_row, share3_row;
             for (int j=0; j< cpm_df[0].size(); j++)
             {
                 if (cpm_df[i][j]<=0)
@@ -287,14 +287,14 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
                     break;
                 }
                 double logcount = log(cpm_df[i][j]);
-                uint32_t scaledcount = logcount*pow(10,3);
+                uint64_t scaledcount = logcount*pow(10,3);
                 // cout << scaledcount << endl;
                 ZZ_p i1 = random_ZZ_p();
                 ZZ_p i2 = random_ZZ_p();
                 ZZ_p i3 = conv<ZZ_p>(scaledcount) - i1 - i2;
-                uint32_t send_i1 = conv<uint32_t>(i1);
-                uint32_t send_i2 = conv<uint32_t>(i2);
-                uint32_t send_i3 = conv<uint32_t>(i3);
+                uint64_t send_i1 = conv<uint64_t>(i1);
+                uint64_t send_i2 = conv<uint64_t>(i2);
+                uint64_t send_i3 = conv<uint64_t>(i3);
                 share1_row.push_back(send_i1);
                 share1_row.push_back(send_i2);
                 share2_row.push_back(send_i2);
@@ -306,11 +306,11 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             phenoshares[1].insert(phenoshares[1].end(), share2_row.begin(), share2_row.end());
             phenoshares[2].insert(phenoshares[2].end(), share3_row.begin(), share3_row.end());
         }
-        vector<uint32_t> matshape = {
-            // static_cast<uint32_t>(testg.size()),
-            // static_cast<uint32_t>(testg[0].size()),
-            static_cast<uint32_t>(testp_row),
-            static_cast<uint32_t>(testp_col)
+        vector<uint64_t> matshape = {
+            // static_cast<uint64_t>(testg.size()),
+            // static_cast<uint64_t>(testg[0].size()),
+            static_cast<uint64_t>(testp_row),
+            static_cast<uint64_t>(testp_col)
         };
 
         owner_p1.send(matshape);
@@ -377,13 +377,13 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         throw invalid_argument("Please choose normalization method between qn and deseq2.\n");
     }
 
-    vector<vector<int32_t>> geno_scaled;
+    vector<vector<int64_t>> geno_scaled;
     vector<double> geno_var, pheno_var;
     
     
     string pheno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/bed_template.tsv";
-    string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_centered.tsv";
-    string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variantdf.tsv";
+    string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_genotype.tsv";
+    string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variant.tsv";
     auto loadgeno = chrono::high_resolution_clock::now();
     cout << "Preparing Genotype matrix... " << flush;
     prepareInput testinput(pheno_pos, geno_matrix,geno_pos,1000000);
@@ -405,9 +405,6 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         {
             cout << "Client will send one phenotype\n";
             vector<BitVector> bitInput;
-            // string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/samplewise_QN.tsv";
-            // string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/accuracy_combination/correct_sampleQN.tsv";
-            // string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/accuracy_combination/sample_thres125_fp1.tsv";
             // vector<double> input = getRowFromMatrixFile(filename,r, numCol);
 
             // string filename ="/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/testdata2.txt";
@@ -419,7 +416,7 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             // string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_centered.tsv";
             // string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variantdf.tsv";
             // prepareInput testinput(pheno_pos, geno_matrix,geno_pos,1000000);
-            vector<uint32_t> range;
+            vector<uint64_t> range;
             
             string chromosome = testinput.getCisRange(geneID[r],range);
             // cout << string("gene "+geneID[r]+"/chr "+ chromosome+ "/start "+ to_string(range[0])+"/end "+ to_string(range[1])+"\n");
@@ -446,11 +443,10 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             // cout << string("first geno var: "+to_string(geno_var[0])+"\n");
             geno_scaled = ScaleVector(slicedgeno, pow(10,3));
             
-            // vector<double> input(pheno[r].begin(), pheno[r].end());
-            vector<uint32_t> secrets = ScaleVector(pheno[r], pow(10,3)); // integer version of secret
+            vector<uint64_t> secrets = ScaleVector(pheno[r], pow(10,3)); // integer version of secret
             auto smax = max_element(secrets.begin(), secrets.end());
-            // uint32_t absmax = abs(*smax);
-            uint32_t maxsecret = nearestPowerOf2(*smax);
+            
+            uint64_t maxsecret = nearestPowerOf2(*smax);
             bitdecompose(secrets, bitInput);
 
             
@@ -459,37 +455,29 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             string original = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/zscores.txt");
             vector<double> zscore_input = CSVtoVector(zscore_filename);
             vector<double> pre_centered = CSVtoVector(original);
-            // cout << "phenotype variance: " << doublevariance(pre_centered, doublemean(pre_centered)) << endl;
             double pheno_var =doublevariance(pre_centered, doublemean(pre_centered));//0.9782648500530864;// 0.9596748533543238; //TODO::Don't put manual numbers here 
-            // double geno_var1 = calculateVariance(slicedgeno[0]);
-            //pre-calculate std_ratio TODO: for real life implementation, genotype variance must be calculated in a secure way
-            
+
 
             for (size_t j = 0; j < geno_var.size(); ++j) {
                 std_ratio.push_back(sqrt(pheno_var / geno_var[j]));
             }
-            // cout << string("\tSLICED GENO shape: "+to_string(slicedgeno.size())+","+to_string(slicedgeno[0].size())+"\n");
-            // cout << string("\tSTDRATIO calculated with shape: "+to_string(std_ratio.size())+"\n");
-            // cout << string("\tGENO_VAR shape: "+to_string(geno_var.size())+"\n");
+            // writeVectorToCSV(std_ratio, "std_ratio__");
             auto min = min_element(zscore_input.begin(), zscore_input.end());
             double shiftsize = abs(*min);
             // cout << "shift size: " << shiftsize << endl;
-            vector<int32_t> zscores_scaled = ScaleVector_signed(zscore_input, pow(10,3));
+            vector<int64_t> zscores_scaled = ScaleVector_signed(zscore_input, pow(10,3));
             
             cout << "P: " << p << endl;
             // ZZ_p::init(to_ZZ(p)); 
-            uint32_t inv = PowerMod(3, -1, p);
-            vector<uint32_t> vectorsize{(uint32_t) bitInput.size(), (uint32_t) bitInput[0].size(), p, inv};
+            uint64_t inv = PowerMod(3, -1, p);
+            vector<uint64_t> vectorsize{(uint64_t) bitInput.size(), (uint64_t) bitInput[0].size(), p, inv};
             owner_p1.send(vectorsize);
             owner_p2.send(vectorsize);
             owner_p3.send(vectorsize);
-            // Send the original input for verification
-            // owner_p1.asyncSend(input);
-            // owner_p2.asyncSend(input);
-            // owner_p3.asyncSend(input);
-            vector<vector<uint32_t>> shares;
+
+            vector<vector<uint64_t>> shares;
             for (int i = 0; i < 3; i++) {
-                shares.push_back(vector<uint32_t>());
+                shares.push_back(vector<uint64_t>());
             }
             // making the shares: for each bit, loop through secrets
             for (int j=bitInput[0].size()-1; j >=0; j--)
@@ -499,9 +487,9 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
                     ZZ_p x1 = random_ZZ_p();
                     ZZ_p x2 = random_ZZ_p();
                     ZZ_p x3 = to_ZZ_p(bitInput[i][j]) - x1 - x2;
-                    uint32_t send_x1 = conv<uint32_t>(x1);
-                    uint32_t send_x2 = conv<uint32_t>(x2);
-                    uint32_t send_x3 = conv<uint32_t>(x3);
+                    uint64_t send_x1 = conv<uint64_t>(x1);
+                    uint64_t send_x2 = conv<uint64_t>(x2);
+                    uint64_t send_x3 = conv<uint64_t>(x3);
                     shares[0].push_back(send_x1);
                     shares[0].push_back(send_x2);
                     shares[1].push_back(send_x2);
@@ -524,16 +512,16 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
                 // string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/toy_QN/" + zscorefile + ".txt");
                 // vector<double> zscore_input = CSVtoVector(zscore_filename);
                 // print_vector(zscore_input);
-                // vector<int32_t> zscores_int = ScaleVector_signed(zscore_input, pow(10,5));
+                // vector<int64_t> zscores_int = ScaleVector_signed(zscore_input, pow(10,5));
                 // auto min = min_element(zscore_input.begin(), zscore_input.end());
                 // double shiftsize = abs(*min);
                 // cout << "shift size: " << shiftsize << endl;
                 // vector<double> zscores_shifted = ShiftVector(zscore_input, shiftsize);
-                // vector<uint32_t> zscores_scaled = ScaleVector(zscores_shifted, pow(10,2));
+                // vector<uint64_t> zscores_scaled = ScaleVector(zscores_shifted, pow(10,2));
                 // cout << "zscores size: " << zscores_scaled.size() << endl;
-                vector<vector<uint32_t>> identity_shares;
+                vector<vector<uint64_t>> identity_shares;
                 for (int i = 0; i < 3; i++) {
-                    identity_shares.push_back(vector<uint32_t>());
+                    identity_shares.push_back(vector<uint64_t>());
                 }
                 //sending identity shares
                 for (int j=0; j< bitInput.size(); j++)
@@ -541,9 +529,9 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
                     ZZ_p i1 = random_ZZ_p();
                     ZZ_p i2 = random_ZZ_p();
                     ZZ_p i3 = conv<ZZ_p>(j+1) - i1 - i2;
-                    uint32_t send_i1 = conv<uint32_t>(i1);
-                    uint32_t send_i2 = conv<uint32_t>(i2);
-                    uint32_t send_i3 = conv<uint32_t>(i3);
+                    uint64_t send_i1 = conv<uint64_t>(i1);
+                    uint64_t send_i2 = conv<uint64_t>(i2);
+                    uint64_t send_i3 = conv<uint64_t>(i3);
                     identity_shares[0].push_back(send_i1);
                     identity_shares[0].push_back(send_i2);
                     identity_shares[1].push_back(send_i2);
@@ -557,9 +545,9 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
                 owner_p1.send(shiftsize);
                 owner_p2.send(shiftsize);
                 owner_p3.send(shiftsize);
-                vector<vector<uint32_t>> zscore_shares;
+                vector<vector<uint64_t>> zscore_shares;
                 for (int i = 0; i < 3; i++) {
-                    zscore_shares.push_back(vector<uint32_t>());
+                    zscore_shares.push_back(vector<uint64_t>());
                 }
                 for (int i=0; i<zscores_scaled.size(); i++)
                 {
@@ -571,9 +559,9 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
                     else
                         z3 = conv<ZZ_p>(zscores_scaled[i]) - z1 - z2;
                     // ZZ_p z3 = to_ZZ_p(zscores_shifted[i]) - z1 - z2;
-                    uint32_t send_z1 = conv<uint32_t>(z1);
-                    uint32_t send_z2 = conv<uint32_t>(z2);
-                    uint32_t send_z3 = conv<uint32_t>(z3);
+                    uint64_t send_z1 = conv<uint64_t>(z1);
+                    uint64_t send_z2 = conv<uint64_t>(z2);
+                    uint64_t send_z3 = conv<uint64_t>(z3);
                     zscore_shares[0].push_back(send_z1);
                     zscore_shares[0].push_back(send_z2);
                     zscore_shares[1].push_back(send_z2);
@@ -589,9 +577,9 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             // cout << "Secrets shared " << std::time(nullptr) << endl;
             // cout << "Sent secret shared row values to parties.\n";
         }
-        vector<vector<uint32_t>> genoshares;
+        vector<vector<uint64_t>> genoshares;
         for (int i = 0; i < 3; i++) {
-            genoshares.push_back(vector<uint32_t>());
+            genoshares.push_back(vector<uint64_t>());
         }
         // sending geno shares
         for (int i=0; i< geno_scaled.size(); i++)
@@ -606,9 +594,9 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
                 else
                     i3 = conv<ZZ_p>(geno_scaled[i][j]) - i1 - i2;
 
-                uint32_t send_i1 = conv<uint32_t>(i1);
-                uint32_t send_i2 = conv<uint32_t>(i2);
-                uint32_t send_i3 = conv<uint32_t>(i3);
+                uint64_t send_i1 = conv<uint64_t>(i1);
+                uint64_t send_i2 = conv<uint64_t>(i2);
+                uint64_t send_i3 = conv<uint64_t>(i3);
                 genoshares[0].push_back(send_i1);
                 genoshares[0].push_back(send_i2);
                 genoshares[1].push_back(send_i2);
@@ -617,11 +605,11 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
                 genoshares[2].push_back(send_i1);
             }
         }
-        uint32_t testg_row = geno_scaled.size();
-        uint32_t testg_col = geno_scaled[0].size();
-        vector<uint32_t> genoshape = {
-            static_cast<uint32_t>(testg_row),
-            static_cast<uint32_t>(testg_col),
+        uint64_t testg_row = geno_scaled.size();
+        uint64_t testg_col = geno_scaled[0].size();
+        vector<uint64_t> genoshape = {
+            static_cast<uint64_t>(testg_row),
+            static_cast<uint64_t>(testg_col),
         };
 
         owner_p1.send(genoshape);
@@ -853,7 +841,7 @@ int main(int argc, char* argv[])
     int startingPort = 12300;
     int assignedPorts=0;
     vector<int> openPorts;
-    while (assignedPorts < 12)
+    while (assignedPorts < 24)
     {
         int port = startingPort;
         if(isPortOpen(port))
@@ -874,23 +862,23 @@ int main(int argc, char* argv[])
     print_vector(openPorts);
     vector<thread> threads;
     vector<vector<double>> resultVec1,resultVec2,resultVec3,resultVec4;
-    string nominal = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/"+nominal_log);
-    string cis = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/" +cis_log);
+    string nominal = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/pQTL_"+nominal_log);
+    string cis = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/pQTL_" +cis_log);
     Logger nominallogger(nominal+to_string(lo_row)+"_"+to_string(mid_row)+".tsv"), cislogger(cis+to_string(lo_row)+"_"+to_string(mid_row)+".tsv");
-    Logger nominallogger2(nominal+to_string(mid_row)+"_"+to_string(hi_row)+".tsv"),cislogger2(nominal+to_string(mid_row)+"_"+to_string(hi_row)+".tsv");
+    Logger nominallogger2(nominal+to_string(mid_row)+"_"+to_string(hi_row)+".tsv"),cislogger2(cis+to_string(mid_row)+"_"+to_string(hi_row)+".tsv");
     nominallogger.log(string("phenID\tvarID\tvarIdx\tdof\tr_nom\tr2_nom\ttstat\tpval\tslope\tslope_se"));
     cislogger.log(string("phenID\tvarID\tvarIdx\tbeta_shape1\tbeta_shape2\ttrue_dof\tpval_true_df\tr_nom\tr2_nom\ttstat\tpval_nominal\tslope\tslope_se\tpval_perm\tpval_beta"));
-    // nominallogger2.log(string("phenID\tvarID\tvarIdx\tdof\tr_nom\tr2_nom\ttstat\tpval\tslope\tslope_se"));
-    // cislogger2.log(string("phenID\tvarID\tvarIdx\tbeta_shape1\tbeta_shape2\ttrue_dof\tpval_true_df\tr_nom\tr2_nom\ttstat\tpval_nominal\tslope\tslope_se\tpval_perm\tpval_beta"));
+    nominallogger2.log(string("phenID\tvarID\tvarIdx\tdof\tr_nom\tr2_nom\ttstat\tpval\tslope\tslope_se"));
+    cislogger2.log(string("phenID\tvarID\tvarIdx\tbeta_shape1\tbeta_shape2\ttrue_dof\tpval_true_df\tr_nom\tr2_nom\ttstat\tpval_nominal\tslope\tslope_se\tpval_perm\tpval_beta"));
     thread thread1([&]() {
         startMPCset(norm_method, openPorts, 0, address, lo_row, mid_row, zscorefile, 0, resultVec1,permut,cislogger,nominallogger);
     });
-    // thread thread2([&]() {
-    //     startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,zscorefile, 0, resultVec2,permut,cislogger2,nominallogger2);
-    // });
+    thread thread2([&]() {
+        startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,zscorefile, 0, resultVec2,permut,cislogger2,nominallogger2);
+    });
 
     threads.emplace_back(move(thread1));
-    // threads.emplace_back(move(thread2));
+    threads.emplace_back(move(thread2));
 
     for (auto& thread : threads) {
         thread.join();

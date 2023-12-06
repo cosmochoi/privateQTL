@@ -56,13 +56,13 @@ public:
     }
     vector<vector<double>> transform(const vector<vector<double>>& M_t, bool center = true) {
         // Convert vector of vectors to Eigen matrix
-        cout << "start transform function. "<< endl;
+        // cout << "start transform function. "<< endl;
         MatrixXd M_t_matrix = vectorOfVectorsToEigenMatrix(M_t);
 
         // Residualize rows of M wrt columns of C
-        cout << "befpre M0_t" << endl;
+        // cout << "befpre M0_t" << endl;
         MatrixXd M0_t = M_t_matrix.colwise() - M_t_matrix.rowwise().mean();
-        cout << "M0_t made." << endl;
+        // cout << "M0_t made." << endl;
         if (center) {
             M0_t -= M0_t * Q_t * Q_t.transpose();
         } else {
@@ -74,7 +74,7 @@ public:
     }
     vector<double> transform(const vector<double>& M_t, bool center = true) {
     // Convert vector to Eigen row matrix
-        cout << "transform entered." << endl;
+        // cout << "transform entered." << endl;
         assert(!M_t.empty()); 
         Eigen::Map<const Eigen::Matrix<double, 1, Eigen::Dynamic>> M_t_matrix(M_t.data(), 1, M_t.size());
 
@@ -119,20 +119,21 @@ private:
         return result;
     }
 };
-vector<double> CSVtoVector(string filename);
+vector<double> CSVtoVector(const string &filename);
+vector<string> TSVtoVector(const string &filename);
 vector<double> getRowFromMatrixFile(string& filename, int rowIndex);
 void read_bedfile_row(vector<double>& rowData, string& geneID, const string& filename, int row, int skipcols, bool header);
 vector<vector<double>> getTPMFromMatrixFile(const string& filename, vector<string>& geneID);
 vector<vector<double>> getCovariates(const string& filename);
-vector<vector<uint32_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID);
-vector<uint32_t> ScaleVector(vector<double> &v, int k);
-vector<vector<int32_t>> ScaleVector(vector<vector<double>>& v, int k);
-vector<int32_t> ScaleVector_signed(vector<double> &v, int k);
-vector<double> UnscaleVector_signed(vector<int32_t> &v, int k);
-vector<uint32_t> ShiftVector(vector<int32_t>& vec, uint32_t number); 
-vector<vector<uint32_t>> ShiftVector(vector<vector<int32_t>>& vec, uint32_t number);
-vector<int32_t> UnshiftVector(vector<uint32_t>& shifted, uint32_t number);
-uint32_t nearestPowerOf2(int N);
+vector<vector<uint64_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID);
+vector<uint64_t> ScaleVector(vector<double> &v, int k);
+vector<vector<int64_t>> ScaleVector(vector<vector<double>>& v, int k);
+vector<int64_t> ScaleVector_signed(vector<double> &v, int k);
+vector<double> UnscaleVector_signed(vector<int64_t> &v, int k);
+vector<uint64_t> ShiftVector(vector<int64_t>& vec, uint64_t number); 
+vector<vector<uint64_t>> ShiftVector(vector<vector<int64_t>>& vec, uint64_t number);
+vector<int64_t> UnshiftVector(vector<uint64_t>& shifted, uint64_t number);
+uint64_t nearestPowerOf2(int N);
 int mleBeta(vector < double > & pval, double & beta_shape1, double & beta_shape2);
 double doublemean(vector < double > & X);
 double doublevariance(vector < double > & X, double mean);
@@ -144,7 +145,7 @@ double getPvalue(double corr, double df);
 double getSlope(double nominal_correlation, double psd, double gsd);
 vector<double> center_normalize(vector<vector<double>>& M);
 double center_normalize_vec(vector<double>& M);
-template <typename T>
-void writematrixToTSV(const vector<vector<T>>& data, const string& name);
+// template <typename T>
+void writematrixToTSV(const vector<vector<double>>& data, const string& name);
 vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index);
 #endif

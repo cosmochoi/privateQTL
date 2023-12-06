@@ -58,12 +58,12 @@ public:
     IOService ios;
     PRNG globalprng;
     int pid;
-    uint32_t inv;
-    uint32_t lk;
-    uint32_t n;
-    uint32_t p;
+    uint64_t inv;
+    uint64_t lk;
+    uint64_t n;
+    uint64_t p;
     double shiftsize;
-    typedef Eigen::Matrix <uint32_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXi;
+    typedef Eigen::Matrix <uint64_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXi;
     
     mpc(){};
     bool initialize(int pid, string ownerIP, int ownerPort, int toOwnerPort, string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2);
@@ -76,8 +76,8 @@ public:
     void receiveSecrets();
     void assertSize(vector<ZZ_p> pi, string tag);
     void assertValid(vector<ZZ_p> sigma, string tag);
-    vector<uint32_t> apply_plaintext_perm(vector<uint32_t> rho, vector<uint32_t> sigma);
-    vector<ZZ_p> Frand(uint32_t bufferSize);
+    vector<uint64_t> apply_plaintext_perm(vector<uint64_t> rho, vector<uint64_t> sigma);
+    vector<ZZ_p> Frand(uint64_t bufferSize);
     vector<ZZ_p> reveal(vector<ZZ_p> &pi, bool isperm);
     void reshare(vector<ZZ_p> &shares, int reshareID);
     void reshareM(vector<vector<ZZ_p>>& shares, int reshareID);
@@ -125,8 +125,8 @@ public:
 
             for (int i = 0; i < numRowsV; i++) {
                 for (int j = 0; j < numColsV / 2; j++) {
-                    dest1(j, i) = conv<uint32_t>(v[i][2 * j]);
-                    dest2(j, i) = conv<uint32_t>(v[i][2 * j + 1]);
+                    dest1(j, i) = conv<uint64_t>(v[i][2 * j]);
+                    dest2(j, i) = conv<uint64_t>(v[i][2 * j + 1]);
                 }
             }
         } else {
@@ -138,15 +138,15 @@ public:
 
             for (int i = 0; i < numRowsV; i++) {
                 for (int j = 0; j < numColsV / 2; j++) {
-                    dest1(i, j) = conv<uint32_t>(v[i][2 * j]);
-                    dest2(i, j) = conv<uint32_t>(v[i][2 * j + 1]);
+                    dest1(i, j) = conv<uint64_t>(v[i][2 * j]);
+                    dest2(i, j) = conv<uint64_t>(v[i][2 * j + 1]);
                 }
             }
         }
     }
 
 
-    inline void EigentoZZ(vector<uint32_t>& share1, vector<uint32_t>& share2, vector<vector<ZZ_p>>& dest){
+    inline void EigentoZZ(vector<uint64_t>& share1, vector<uint64_t>& share2, vector<vector<ZZ_p>>& dest){
         // vector<uint32_t> converted(v.size());
         if (share1.size() != share2.size())
             throw invalid_argument("Your shares have different sizes.");
@@ -160,8 +160,8 @@ public:
                 dest[i][2*j+1] = conv<ZZ_p>(share2[i*dest[0].size()/2+j]);
             }
         }
-}
-void writeEigenToTSV(Eigen::Matrix <double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& mat, const string& name);
+    }
+    void writeEigenToTSV(Eigen::Matrix <double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& mat, const string& name);
 private:
     block commonSeed = oc::toBlock(27);
     map<int, PRNG *> seedpair;
@@ -172,7 +172,7 @@ private:
     vector<ZZ_p> zscores;
     vector<vector<ZZ_p>> geno;
     vector<vector<ZZ_p>> pheno;
-    vector<uint32_t> shape;
+    vector<uint64_t> shape;
     // atomic<int>& readyCounter;
     // atomic<bool> allPartiesReady;
     Channel dataowner;
