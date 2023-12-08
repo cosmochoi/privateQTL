@@ -37,6 +37,23 @@ vector<string> TSVtoVector(const string &filename) {
 
     return input_vec;
 }
+vector<double> TSVtoDoubleVector(const string &filename) {
+    vector<double> input_vec;
+    ifstream data(filename);
+    string line;
+
+    while (getline(data, line)) {
+        istringstream iss(line);
+        string token;
+
+        while (getline(iss, token, '\t')) {
+            double entry = stod(token);
+            // rowVector.push_back(entry);
+            input_vec.push_back(entry);
+        }
+    }
+    return input_vec;
+}
 vector<double> getRowFromMatrixFile(string& filename, int rowIndex) {
     vector<double> rowVector;
     ifstream data(filename);

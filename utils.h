@@ -1,6 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 #define MATHLIB_STANDALONE
+#define EIGEN_USE_THREADS
 #include <string>
 #include <vector>
 #include <iostream>
@@ -121,6 +122,7 @@ private:
 };
 vector<double> CSVtoVector(const string &filename);
 vector<string> TSVtoVector(const string &filename);
+vector<double> TSVtoDoubleVector(const string &filename);
 vector<double> getRowFromMatrixFile(string& filename, int rowIndex);
 void read_bedfile_row(vector<double>& rowData, string& geneID, const string& filename, int row, int skipcols, bool header);
 vector<vector<double>> getTPMFromMatrixFile(const string& filename, vector<string>& geneID);

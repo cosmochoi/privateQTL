@@ -780,7 +780,7 @@ void mpc::reveal_matrix(vector<vector<ZZ_p>>& geno, vector<vector<ZZ_p>>& pheno,
                 unshifted = conv<int64_t>(row[j]) - this->p;
             else
                 unshifted = conv<int64_t>(row[j]);
-            double r_nom = static_cast<double>(unshifted)/pow(10,5);
+            double r_nom = static_cast<double>(unshifted)/pow(10,6);
             unscaledrow.push_back(r_nom);
             // r2row.push_back(r_nom*r_nom);
 
@@ -802,7 +802,7 @@ void mpc::reveal_matrix(vector<vector<ZZ_p>>& geno, vector<vector<ZZ_p>>& pheno,
                 unshifted = conv<int64_t>(row[j]) - this->p;
             else
                 unshifted = conv<int64_t>(row[j]);
-            double r_nom = static_cast<double>(unshifted)/pow(10,5);
+            double r_nom = static_cast<double>(unshifted)/pow(10,6);
             unscaledrow.push_back(r_nom);
             // r2row.push_back(r_nom*r_nom);
 
@@ -858,7 +858,7 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
                 unshifted = conv<int64_t>(row[j]) - this->p;
             else
                 unshifted = conv<int64_t>(row[j]);
-            double r_nom = static_cast<double>(unshifted)/pow(10,10);
+            double r_nom = static_cast<double>(unshifted)/pow(10,12);
             unscaledrow.push_back(r_nom);
             r2row.push_back(r_nom*r_nom);
 
@@ -868,9 +868,10 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
     }
     //calculating statistics
     int dof = this->zscores.size()-2;
-
+    
     if (this->pid ==0)
     {
+        cout << "WHOP"<< endl;
         vector<double> std_ratio;
         // writematrixToTSV(matpheno, int startrow, int endrow, const string& name)
         // writematrixToTSV(matpheno, "bloodpheno");
@@ -893,6 +894,7 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
         // cout << string("\nreceived std_ratio first: "+to_string(std_ratio[0])+ ", 752: "+to_string(std_ratio[752])+"\n");
         // cout <<string("received std ratio size: "+to_string(std_ratio.size())+"\n");
         // cout << string("Matmult shape: "+to_string(matcorr.size())+","+to_string(matcorr[0].size())+"\n");
+        cout << "WHOP2"<< endl;
         //Writing nominal pass
         for (int v=0; v<cisVar.size()-1; v++)
         {
@@ -909,7 +911,7 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
             "\t"+to_string(pval)+"\t"+to_string(slope)+"\t"+to_string(slope_se));
             nominalLogger.log(message);
         }
-        
+        cout << "WHOP3"<< endl;
         vector<vector<double>> transposed(matcorr[0].size(), vector<double>(matcorr.size()));
         for (size_t i = 0; i < matcorr.size(); ++i) {
             for (size_t j = 0; j < matcorr[i].size(); ++j) {
@@ -982,13 +984,14 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
         "\npval_perm: "+to_string(pval_adj)+"\nbeta_shape1: "+to_string(beta_shape1)+"\nbeta_shape2: "+to_string(beta_shape2)+"\npval_beta: "+to_string(pval_beta)+
         +"\n----------------------------\n");
         
-        vector<double> agg_stat;
-        agg_stat.push_back(static_cast<double>(ix));
-        agg_stat.push_back(slope);
-        agg_stat.push_back(sqrt(tstat2));
-        agg_stat.push_back(slope_se);
-        agg_stat.push_back(pval_adj);
-        this->toOwner.send(agg_stat);
+        // vector<double> agg_stat;
+        // agg_stat.push_back(static_cast<double>(ix));
+        // agg_stat.push_back(slope);
+        // agg_stat.push_back(sqrt(tstat2));
+        // agg_stat.push_back(slope_se);
+        // agg_stat.push_back(pval_adj);
+        int complete = 1;
+        this->toOwner.send(complete);
         // cout <<string("everything so far complete.\n");
         
     }
@@ -1296,26 +1299,26 @@ vector<vector<ZZ_p>> mpc::matmult(vector<vector<ZZ_p>>& mat1, vector<vector<ZZ_p
     chrono::duration<double> matmult_dur = matmult - start;
     double matmult_InSeconds = matmult_dur.count();
     double matmult_Inminutes = matmult_InSeconds/ 60.0;
-    // if (this->pid ==0)
-    //     cout << string("finished "+to_string(matmult_Inminutes)+" minutes. Creating random number matrices...") << flush;
+    if (this->pid ==0)
+        cout << string("finished "+to_string(matmult_Inminutes)+" minutes. Creating random number matrices...") << flush;
     MatrixXi random1, random2;
     random1.resize(result1.rows(), result1.cols());
     random2.resize(result1.rows(), result1.cols());
     random1.setConstant(minus_PRNG.get<uint64_t>()%this->p);
     random2.setConstant(plus_PRNG.get<uint64_t>()%this->p);
-    // if (this->pid ==0)
-    //     cout << "finished. Adding randomness..." << flush;
+    if (this->pid ==0)
+        cout << "finished. Adding randomness..." << flush;
     result1 = result1+random1-random2;
     // result1 = (result1.array()+(minus_PRNG.get<uint64_t>()%this->p) - (plus_PRNG.get<uint64_t>()%this->p)).matrix();
-    // if (this->pid ==0)
-    //     cout << "finished. Flattening to send vector..." << flush;
+    if (this->pid ==0)
+        cout << "finished. Flattening to send vector..." << flush;
     vector<uint64_t> to_send(result1.data(), result1.data()+result1.size());
 
-    // if (this->pid ==0)
-    //     cout << string("finished with vector size:"+ to_string(to_send.size()) +".\nSending and receiving...") << endl;
+    if (this->pid ==0)
+        cout << string("finished with vector size:"+ to_string(to_send.size()) +".\nSending and receiving...") << endl;
     
     //////////
-    const size_t chunkSize = 2000000;
+    const size_t chunkSize = 200000;
     vector<uint64_t> received_data;
     for (size_t i = 0; i < to_send.size(); i += chunkSize) {
         size_t remaining = min(chunkSize, to_send.size() - i);

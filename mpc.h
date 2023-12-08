@@ -1,6 +1,6 @@
 #ifndef MPC_H
 #define MPC_H
-
+#define EIGEN_USE_THREADS
 #include <cryptoTools/Common/BitVector.h>
 #include <cryptoTools/Crypto/PRNG.h>
 #include <cryptoTools/Network/IOService.h>

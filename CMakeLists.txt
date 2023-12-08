@@ -24,6 +24,8 @@ set(GSL_LIBRARY "/nfs/sw/gsl/gsl-2.6/lib/libgsl.a")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 set(OpenBLAS_LIBRARY "/nfs/sw/openblas/openblas-0.2.19/libopenblas.a")
 set(OpenMP_LIBRARY "/nfs/sw/openmp/openmp-9.0.1/lib/libgomp.so")
+set(ENV{OPENBLAS_NUM_THREADS} "2")
+set(ENV{OMP_NUM_THREADS} "2")
 cmake_minimum_required(VERSION 3.18)
 
 project(securesort)

@@ -200,14 +200,15 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         vector<string> cisVariants;
         vector<double> std_ratio;
         string geneID;
-        // string pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/blood_qn_invCDF.bed";
-        string pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/mis_acc.qn.bed";
+        string pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/blood_qn_invCDF.bed";
+        // string pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/mis_acc.qn.bed";
         vector<double> norm_pheno;
         read_bedfile_row(norm_pheno,geneID, pheno_file, r,4,true);
         vector<double> pheno_res = res.transform(norm_pheno);
         double bed_var = center_normalize_vec(pheno_res);
-        vector<int64_t> pheno = ScaleVector_signed(pheno_res, pow(10,5)); // integer version of secret
         // writeVectorToTSV(pheno_res, string("pQTL_row_"+to_string(r)+"_pheno"));
+        vector<int64_t> pheno = ScaleVector_signed(pheno_res, pow(10,6)); // integer version of secret
+        
         cout << string("bed file phenotype var: "+to_string(bed_var)+"\n");
         vector<uint64_t> range;
         string chromosome = testinput.getCisRange(geneID,range);
@@ -215,22 +216,21 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         vector<vector<double>> slicedgeno = testinput.sliceGeno(range, chromosome, -1,cisVariants);
         vector<vector<double>> geno_res = res.transform(slicedgeno);
         geno_var = center_normalize(geno_res);
-        geno_scaled = ScaleVector(geno_res, pow(10,5));
-        // vector<vector<double>> geno_res = getMatrixFile("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/centered_resd_slicedgeno.tsv", 0, 3000, false, false);
-        // geno_var = CSVtoVector("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/pQTL_row_2_geno_var.csv");
         
+        // vector<vector<double>> geno_res = getMatrixFile("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/pQTL_row_0_geno_centered_resd.tsv", 0, 3000, false, false);
+        // geno_var = TSVtoDoubleVector("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/pQTL_row_0_geno_var.tsv");
+        geno_scaled = ScaleVector(geno_res, pow(10,6));
         // writeVectorToTSV(geno_var, string("pQTL_row_"+to_string(r)+"_geno_var"));
-        // string geno_name = "centered_resd_slicedgeno";
-        // writematrixToTSV(geno_res, geno_name);
+        // writematrixToTSV(geno_res,  string("pQTL_row_"+to_string(r)+"_geno_centered_resd"));
         // writeVectorToTSV(cisVariants, string("pQTL_row_"+to_string(r)+"_cisVar"));
         
-        // vector<string> cisVariants = TSVtoVector("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/pQTL_row_2_cisVar.tsv");
+        // vector<string> cisVariants = TSVtoVector("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/pQTL_row_0_cisVar.tsv");
         
         for (size_t j = 0; j < geno_var.size(); ++j) {
             std_ratio.push_back(sqrt(bed_var / geno_var[j]));
         }
         // writeVectorToTSV(std_ratio, "pQTL_std_ratio");
-        
+        // std_ratio = TSVtoDoubleVector("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/pQTL_std_ratio.tsv");
         uint64_t inv = PowerMod(3, -1, p);
         vector<vector<uint64_t>> shares;
         for (int i = 0; i < 3; i++) {
@@ -297,7 +297,6 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
             static_cast<uint64_t>(testg_row),
             static_cast<uint64_t>(testg_col),
         };
-        cout << "5// " << std_ratio[0] << " " << std_ratio[1] << " " << std_ratio[2] << " " << std_ratio[3] << endl;
         owner_p1.send(genoshape);
         owner_p2.send(genoshape);
         owner_p3.send(genoshape);
@@ -306,7 +305,6 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         owner_p3.send(genoshares[2]);
 
         // sending std_ratio in plaintext to party 1
-        cout << "6// " << std_ratio[0] << " " << std_ratio[1] << " " << std_ratio[2] << " " << std_ratio[3] << endl;
         owner_p1.send(std_ratio);
         string serializedvariants=string(geneID+";");
         for (const std::string& str : cisVariants) {
@@ -320,8 +318,12 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         owner_p1.send(serializedvariants.data(), serializedvariants.size());
         // cout << "Geno shared " << std::time(nullptr) << endl;
         cout << "Sent secret shared geno to parties.\n";
-        vector<double> agg_stat;
-        p1_owner.recv(agg_stat);
+        int complete;
+        p1_owner.recv(complete);
+        if (complete != 1)
+        {
+            cout << "Didn't receive confirmation. Did row finish?" << endl;
+        }
     }
 
     owner_p1.close();
