@@ -1,6 +1,6 @@
 #ifndef MPC_H
 #define MPC_H
-#define EIGEN_USE_THREADS
+// #define EIGEN_USE_THREADS
 #include <cryptoTools/Common/BitVector.h>
 #include <cryptoTools/Crypto/PRNG.h>
 #include <cryptoTools/Network/IOService.h>
@@ -25,7 +25,7 @@
 #include <Eigen/Dense>
 #include "utils.h"
 #include <omp.h>
-using namespace Eigen;
+// using namespace Eigen;
 using namespace osuCrypto;
 using namespace std;
 using namespace NTL;
@@ -182,7 +182,22 @@ private:
     Channel toPlus;
     Channel toMinus;  
 };
-
+inline vector<ZZ_p> convVec(vector<uint64_t> v){
+    vector<ZZ_p> converted(v.size());
+    for (int i=0; i<v.size(); i++)
+    {
+        converted[i] = to_ZZ_p(v[i]);
+    }
+    return converted;
+}
+inline vector<uint64_t> convVec(vector<ZZ_p> v){
+    vector<uint64_t> converted(v.size());
+    for (int i=0; i<v.size(); i++)
+    {
+        converted[i] = conv<uint64_t>(v[i]);
+    }
+    return converted;
+}
 template <typename T>
 void print_vector(vector<T> printme)
 {
@@ -193,25 +208,7 @@ void print_vector(vector<T> printme)
     std::cout << "\n";
 }
 
-template <typename T>
-void print_vector(vector<vector<T>> printme)
-{
-    for (int i =0; i<printme.size(); i++)
-    {
-        print_vector(printme[i]);
-    }
-    std::cout << "\n";
-}
 
-template <typename T>
-void print_vector(Vec<T> printme)
-{
-    for (int i =0; i<printme.length(); i++)
-    {
-        std::cout << printme.get(i) << " ";
-    }
-    std::cout << "\n";
-}
 
 template <typename T>
 void assert_equal(vector<T> one, vector<T> two, string tag)

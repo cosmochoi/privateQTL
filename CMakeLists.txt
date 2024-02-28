@@ -32,7 +32,7 @@ project(securesort)
 set(CMAKE_CXX_COMPILER "/nfs/sw/gcc/gcc-11.2.0/bin/g++")
 add_definitions(-DEIGEN_USE_BLAS)
 
-add_executable(securesort utils.cpp sharing.cpp mpc.cpp input.cpp)
+add_executable(securesort utils.cpp scenario2.cpp mpc.cpp input.cpp)
 add_executable(scenario1 utils.cpp scenario1.cpp mpc.cpp input.cpp)
 add_executable(parse parseoutput.cpp)
 find_package(cryptoTools REQUIRED)

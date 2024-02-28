@@ -1,8 +1,26 @@
 #include "utils.h"
 
+vector<vector<double>> eigenMatrixToVectorOfVectors(const MatrixXd& input) {
+    vector<vector<double>> result(input.rows(), vector<double>(input.cols()));
+    for (int i = 0; i < input.rows(); ++i) {
+        for (int j = 0; j < input.cols(); ++j) {
+            result[i][j] = input(i, j);
+        }
+    }
+    return result;
+}
 
-
-
+MatrixXd vectorOfVectorsToEigenMatrix(const vector<vector<double>>& input) {
+    MatrixXd result; 
+    result.resize(input.size(), input[0].size());
+    // MatrixXd result(input.size(), input[0].size());
+    for (size_t i = 0; i < input.size(); ++i) {
+        for (size_t j = 0; j < input[i].size(); ++j) {
+            result(i, j) = input[i][j];
+        }
+    }
+    return result;
+}
 vector<double> CSVtoVector(const string &filename)
 {
     vector<double> input_vec;
@@ -218,12 +236,12 @@ vector<vector<double>> getCovariates(const string& filename) {
         // int currentColumn = 0;
 
         // Skip the first two columns
-        getline(lineStream, cell, '\t');
+        getline(lineStream, cell, ',');
         // geneID.push_back(cell);
         // getline(lineStream, cell, '\t');
 
         vector<double> rowVector;
-        while (getline(lineStream, cell, '\t')) {
+        while (getline(lineStream, cell, ',')) {
             try {
                 double entry = stod(cell);
                 rowVector.push_back(entry);
@@ -362,6 +380,26 @@ vector<int64_t> UnshiftVector(vector<uint64_t>& shifted, uint64_t number)
         // unshifted[i] = static_cast<int64_t>(shiftedValue);
     }
     return unshifted;
+}
+
+template <typename T>
+void print_vector(vector<vector<T>> printme)
+{
+    for (int i =0; i<printme.size(); i++)
+    {
+        print_vector(printme[i]);
+    }
+    std::cout << "\n";
+}
+
+template <typename T>
+void print_vector(Vec<T> printme)
+{
+    for (int i =0; i<printme.length(); i++)
+    {
+        std::cout << printme.get(i) << " ";
+    }
+    std::cout << "\n";
 }
 uint64_t nearestPowerOf2(int N)
 {
@@ -537,6 +575,123 @@ double getSlope(double nominal_correlation, double psd, double gsd) {
     if (gsd < 1e-16 || psd < 1e-16) return 0;
     else return nominal_correlation * psd / gsd;
 }
+
+void svd_flip(MatrixXd& u, MatrixXd& v, bool u_based_decision) {
+    std::cout << "entered svd_flip." << std::endl;
+    if (u_based_decision) {
+        // Columns of u, rows of v
+        VectorXi max_abs_cols(u.cols());
+
+        for (int j = 0; j < u.cols(); ++j) {
+            double max_abs_value = 0.0;
+            int max_abs_index = 0;
+
+            for (int i = 0; i < u.rows(); ++i) {
+                double abs_value = std::abs(u(i, j));
+                if (abs_value > max_abs_value) {
+                    max_abs_value = abs_value;
+                    max_abs_index = i;
+                }
+            }
+
+            max_abs_cols(j) = max_abs_index;
+        }
+        // recreating square matrix with max_abs_cols
+        MatrixXd u_square(u.cols(), u.cols());
+        for (int i = 0; i < u.cols(); ++i) {
+            u_square.row(i) = u.row(max_abs_cols(i));
+        }
+        // Creating signs vector based on signs of diagonal element 
+        VectorXd signs(u.cols());
+        for (int i = 0; i < u.cols(); ++i) {
+            signs(i) = (u_square.diagonal()(i) >= 0) ? 1.0 : -1.0;
+        }
+        
+        for (int i = 0; i < u.cols(); ++i) {
+            u.col(i) *= signs(i);
+        }
+        // u.array() *= signs.array();
+        for (int i=0; i<v.rows(); ++i){
+            v.row(i) *= signs(i);
+        }
+        // v.array().colwise() *= signs.col(0).array();
+    } else {
+        // Rows of v, columns of u
+        VectorXi max_abs_rows = (v.array().abs()).rowwise().maxCoeff().cast<int>();
+
+        MatrixXd signs(v.rows(), v.cols());
+        for (int i = 0; i < v.rows(); ++i) {
+            signs.row(i) = (v.row(i).array() >= 0).template cast<double>() * 2.0 - 1.0;
+        }
+
+        u.array().rowwise() *= signs.row(0).array();
+        v.array() *= signs.array();
+    }
+}
+void PCA(vector<vector<double>>& data, vector<vector<double>>& pc, int n_components)
+{
+    MatrixXd data_mat = vectorOfVectorsToEigenMatrix(data);
+    VectorXd mean = data_mat.colwise().mean();
+    data_mat.rowwise() -= mean.transpose();
+    // Compute covariance matrix
+    MatrixXd covMatrix = (data_mat.transpose() * data_mat) / (data_mat.rows() - 1);
+    if (data.size() < 500 && data[0].size() < 500){
+        cout << "Eigen.." << endl;
+        // Perform eigendecomposition
+        Eigen::EigenSolver<MatrixXd> solver(covMatrix);
+        VectorXd eigenvalues = solver.eigenvalues().real();
+
+        // VectorXd explained_variance_ratio = eigenvalues / eigenvalues.sum();
+        // VectorXd cumulative_variance(explained_variance_ratio.size());
+        // double sum = 0.0;
+        // for (int i = 0; i < explained_variance_ratio.size(); ++i) {
+        //     sum += explained_variance_ratio(i);
+        //     cumulative_variance(i) = sum;
+        // }
+        // // Find the optimal number of components
+        // int optimal_components = 0;
+        // while (optimal_components < cumulative_variance.size() &&
+        //        cumulative_variance[optimal_components] < cumulative_variance_threshold) {
+        //     optimal_components++;
+        // }
+        // cout << "Optimal components: " << optimal_components << endl;
+        MatrixXd eigenvectors = solver.eigenvectors().real();
+        eigenvectors = eigenvectors.leftCols(n_components);
+        pc = eigenMatrixToVectorOfVectors(eigenvectors);
+    }
+    else {
+        cout << "Randomized" << endl;
+        Eigen::JacobiSVD<MatrixXd> svd(covMatrix, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        VectorXd singularValues = svd.singularValues();
+        // reverse(singularValues.data(), singularValues.data() + singularValues.size()); // Reverse the singular values
+        // cout << singularValues(0) << ", " <<singularValues(1) << ", " << singularValues(2) << endl;
+        // VectorXd explained_variance_svd = singularValues.array().square() / (singularValues.size() - 1);
+        // double total_var_svd = explained_variance_svd.sum();
+        // VectorXd explained_variance_ratio_svd = explained_variance_svd / total_var_svd;
+        // // VectorXd explained_variance_ratio_svd = singularValues.array().square() / (singularValues.array().square().sum());
+
+        // VectorXd cumulative_variance_svd(explained_variance_ratio_svd.size());
+        // double sum = 0.0;
+        // for (int i = 0; i < explained_variance_ratio_svd.size(); ++i) {
+        //     sum += explained_variance_ratio_svd(i);
+        //     cumulative_variance_svd(i) = sum;
+        // }
+        // // Find the optimal number of components for SVD
+        // int optimal_components_svd = 0;
+        // while (optimal_components_svd < cumulative_variance_svd.size() &&
+        //        cumulative_variance_svd[optimal_components_svd] < cumulative_variance_threshold) {
+        //     optimal_components_svd++;
+        // }
+        // if (optimal_components_svd == 0){
+        //     optimal_components_svd = 1;
+        // }
+        MatrixXd u_copy = svd.matrixU();
+        MatrixXd v_copy = svd.matrixV();
+        svd_flip(u_copy, v_copy, true);
+        MatrixXd components = v_copy.leftCols(n_components);
+        pc = eigenMatrixToVectorOfVectors(components);
+    }
+}
 vector<double> center_normalize(vector<vector<double>>& M) {
     int rows = M.size();
     int cols = M[0].size();
@@ -620,6 +775,52 @@ void writematrixToTSV(const vector<vector<double>>& data, const string& name)
         cout << "Error opening the file." << endl;
     }
 }
+void writeNormalizedToTSV(const vector<vector<double>>& data, const vector<string>& gene_strings, const string& name)
+{
+    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name  + ".tsv";
+    ofstream file(filename);
+    if (file.is_open())
+    {
+        for (int i = 0; i < data.size(); ++i)
+        {
+            // Add gene name in the first column
+            file << gene_strings[i] << "\t";
+
+            // Add the rest of the values in the row
+            for (const double& value : data[i])
+            {
+                file << value << "\t";
+            }
+            file << std::endl;
+        }
+        file.close();
+        cout << string(name+" matrix successfully written to TSV file.") << endl;
+    }
+    else
+    {
+        cout << "Error opening the file." << endl;
+    }
+}
+
+template <typename T>
+void writeVectorToTSV(const vector<T>& data, string name)
+{
+    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + ".tsv";
+    ofstream file(filename);
+    if (file.is_open())
+    {
+        for (const T& value : data)
+        {
+            file << value << "\t";
+        }
+        file.close();
+        cout << string(name+ " vector successfully written to CSV file.") << endl;
+    }
+    else
+    {
+        cout << "Error opening the file." << endl;
+    }
+}
 vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index) {
     vector<vector<double>> rowsData;
     ifstream data(filename);
@@ -661,3 +862,4 @@ vector<vector<double>> getMatrixFile(const string& filename, int startrow, int e
 
     return rowsData;
 }
+

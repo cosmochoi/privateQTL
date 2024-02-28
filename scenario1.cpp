@@ -7,148 +7,8 @@
 #include <sys/resource.h>
 struct rusage r_usage;
 
-void bitdecompose(vector<uint64_t> &secrets, vector<BitVector> &bitInput)
-{
-    // vector<BitVector> bitInput;
-    for (int i = 0; i < secrets.size(); i++)
-    {
-        string sinput = bitset<32>(secrets[i]).to_string();
-        BitVector decomposed(sinput);
-        bitInput.push_back(decomposed);
-    }
-}
-double calculateVariance(const vector<double>& values) {
-    double sum = 0.0;
-    double mean = 0.0;
-    size_t n = values.size();
 
-    // Calculate the mean
-    for (const double& value : values) {
-        sum += value;
-    }
-    mean = sum / n;
-
-    // Calculate the sum of squared differences
-    double sumSquaredDiff = 0.0;
-    for (const double& value : values) {
-        double diff = value - mean;
-        sumSquaredDiff += diff * diff;
-    }
-
-    // Calculate the variance
-    double variance = sumSquaredDiff / n;
-    return variance;
-}
-template <typename T>
-void writeVectorToTSV(const vector<T>& data, string name)
-{
-    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + ".tsv";
-    ofstream file(filename);
-    if (file.is_open())
-    {
-        for (const T& value : data)
-        {
-            file << value << "\t";
-        }
-        file.close();
-        cout << string(name+ " vector successfully written to CSV file.") << endl;
-    }
-    else
-    {
-        cout << "Error opening the file." << endl;
-    }
-}
-vector<double> get_quantiles(vector<vector<double>>& phen_matrix, vector<vector<size_t>>& rank_matrix) {
-    // vector<vector<size_t>> rank_matrix(phen_matrix[0].size(), vector<size_t>(phen_matrix.size()));
-    for (size_t i = 0; i < phen_matrix[0].size(); i++) {
-        vector<pair<double, size_t>> sorted_indices;
-        for (size_t j = 0; j < phen_matrix.size(); j++) {
-            sorted_indices.emplace_back(phen_matrix[j][i], j);
-        }
-        sort(sorted_indices.begin(), sorted_indices.end());
-        for (size_t j = 0; j < phen_matrix.size(); j++) {
-            rank_matrix[i][j] = sorted_indices[j].second;
-        }
-    }
-
-    // vector<vector<double>> M = phen_matrix;
-    // vector<vector<size_t>> Q = rank_matrix;
-    size_t m = phen_matrix.size();
-    size_t n = phen_matrix[0].size();
-
-    vector<double> quantiles(m, 0.0);
-    for (size_t i = 0; i < n; i++) {
-        for (size_t j = 0; j < m; j++) {
-            quantiles[j] += phen_matrix[rank_matrix[i][j]][i];
-        }
-    }
-
-    return quantiles;
-}
-
-void sample_QN(vector<vector<double>>& phen_matrix, vector<vector<size_t>>& rank_matrix, vector<double>& total_quantiles) {
-    // vector<vector<size_t>> rank_matrix(phen_matrix[0].size(), vector<size_t>(phen_matrix.size()));
-    // for (size_t i = 0; i < phen_matrix[0].size(); i++) {
-    //     vector<pair<double, size_t>> sorted_indices;
-    //     for (size_t j = 0; j < phen_matrix.size(); j++) {
-    //         sorted_indices.emplace_back(phen_matrix[j][i], j);
-    //     }
-    //     sort(sorted_indices.begin(), sorted_indices.end());
-    //     for (size_t j = 0; j < phen_matrix.size(); j++) {
-    //         rank_matrix[i][j] = sorted_indices[j].second;
-    //     }
-    // }
-
-    // vector<vector<double>> M = phen_matrix;
-    // vector<vector<size_t>> Q = rank_matrix;
-    size_t m = phen_matrix.size();
-    size_t n = phen_matrix[0].size();
-
-    for (size_t i = 0; i < n; i++) {
-        for (size_t j = 0; j < m; j++) {
-            phen_matrix[rank_matrix[i][j]][i] = total_quantiles[j]/n;
-        }
-    }
-    // return phen_matrix;
-}
-
-vector<vector<double>> deseq2_cpm(vector<vector<uint64_t>>& counts_df) {
-    int numGenes = counts_df.size();
-    int numSamples = counts_df[0].size();
-
-    vector<double> colSums(numSamples, 0.0);
-    for (int j = 0; j < numSamples; ++j) {
-        for (int i = 0; i < numGenes; ++i) {
-            colSums[j] += static_cast<double>(counts_df[i][j]);
-        }
-    }
-    vector<vector<double>> cpm_df(numGenes, vector<double>(numSamples, 0.0));
-    for (int j = 0; j < numSamples; ++j) {
-        for (int i = 0; i < numGenes; ++i) {
-            cpm_df[i][j] = counts_df[i][j] / colSums[j] * 1e6;
-        }
-    }
-
-    return cpm_df;
-}
-
-double findMedian(const vector<vector<double>>& matrix, size_t col) {
-    vector<double> columnData;
-    for (const auto& row : matrix) {
-        columnData.push_back(row[col]);
-    }
-
-    sort(columnData.begin(), columnData.end());
-
-    size_t size = columnData.size();
-    if (size % 2 == 0) {
-        return (columnData[size / 2 - 1] + columnData[size / 2]) / 2.0;
-    } else {
-        return columnData[size / 2];
-    }
-}
-
-void dataclient(string norm_method, int sendport1, int recvport1, string address1, int sendport2, int recvport2, string address2, int sendport3, int recvport3, string address3,int rowstart, int rowend,string zscorefile, int permut)
+void dataclient(string norm_method, string split_set, int sendport1, int recvport1, string address1, int sendport2, int recvport2, string address2, int sendport3, int recvport3, string address3,int rowstart, int rowend, int permut)
 {
     IOService ios;
     Endpoint epsend1(ios, address1, sendport1, EpMode::Server);
@@ -179,13 +39,14 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
     
     string pheno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/bed_template.tsv";
     // string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_genotype.tsv";
-    string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_genotype_1kGresidualized.tsv";
+    // string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_genotype_1kGresidualized.tsv";
+    string geno_matrix = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/genotype/re/genotype_imputed_projected_residualized_" + split_set +"_concatenated.tsv";
     string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variant.tsv";
-    // string pheno_cov = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/covariates/PC_covariate_df_670.csv";
-    string pheno_cov = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/pheno_blood_18PCs.tsv";
-    vector<vector<double>> covariates = getCovariates(pheno_cov);
+    // string pheno_cov = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/pheno_blood_18PCs.tsv";//qn PCA
+    // string pheno_cov = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/phenotype/covariate_deseq_pca.csv";
+    // vector<vector<double>> covariates = getCovariates(pheno_cov);
 
-    Residualizer res(covariates);   
+    // Residualizer res(covariates);   
     cout << "Loading Genotype matrix..." << flush;
     auto loadgeno = chrono::high_resolution_clock::now();
     prepareInput testinput(pheno_pos, geno_matrix,geno_pos,1000000);
@@ -200,26 +61,39 @@ void dataclient(string norm_method, int sendport1, int recvport1, string address
         vector<string> cisVariants;
         vector<double> std_ratio;
         string geneID;
-        string pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/blood_qn_invCDF.bed";
+        string pheno_file;
+        if (norm_method == "qn"){
+            // pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/blood_qn_invCDF.bed";
+            pheno_file = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/phenotype/residualized_qn.bed"; 
+        }
+        else if (norm_method == "tmm"){
+            // pheno_file = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/phenotype/sorted_blood_rnaseq_tmm_invCDF.bed";
+            pheno_file = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/phenotype/residualized_tmm.bed"; 
+        }
+        else if (norm_method == "deseq2"){
+            // pheno_file = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/phenotype/sorted_blood_rnaseq_deseq_invCDF.bed";
+            // pheno_file = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/phenotype/concatenated_residualized_deseq.bed"; //scenario1
+            pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/private_deseq2_invcdf_"+split_set+"_residualized.bed"; //scenario2_matmult
+        }
         // string pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/mis_acc.qn.bed";
         vector<double> norm_pheno;
         read_bedfile_row(norm_pheno,geneID, pheno_file, r,4,true);
-        vector<double> pheno_res = res.transform(norm_pheno);
-        double bed_var = center_normalize_vec(pheno_res);
-        // writeVectorToTSV(pheno_res, string("pQTL_row_"+to_string(r)+"_pheno"));
-        vector<int64_t> pheno = ScaleVector_signed(pheno_res, pow(10,6)); // integer version of secret
+        // vector<double> pheno_res = res.transform(norm_pheno);
+        double bed_var = center_normalize_vec(norm_pheno);
+        cout << "pheno var: " << bed_var << endl;
+        vector<int64_t> pheno = ScaleVector_signed(norm_pheno, pow(10,6)); // integer version of secret
         
         cout << string("bed file phenotype var: "+to_string(bed_var)+"\n");
         vector<uint64_t> range;
         string chromosome = testinput.getCisRange(geneID,range);
 
         vector<vector<double>> slicedgeno = testinput.sliceGeno(range, chromosome, -1,cisVariants);
-        vector<vector<double>> geno_res = res.transform(slicedgeno);
-        geno_var = center_normalize(geno_res);
+        // vector<vector<double>> geno_res = res.transform(slicedgeno);
+        geno_var = center_normalize(slicedgeno);
         
         // vector<vector<double>> geno_res = getMatrixFile("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/pQTL_row_0_geno_centered_resd.tsv", 0, 3000, false, false);
         // geno_var = TSVtoDoubleVector("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/pQTL_row_0_geno_var.tsv");
-        geno_scaled = ScaleVector(geno_res, pow(10,6));
+        geno_scaled = ScaleVector(slicedgeno, pow(10,6));
         // writeVectorToTSV(geno_var, string("pQTL_row_"+to_string(r)+"_geno_var"));
         // writematrixToTSV(geno_res,  string("pQTL_row_"+to_string(r)+"_geno_centered_resd"));
         // writeVectorToTSV(cisVariants, string("pQTL_row_"+to_string(r)+"_cisVar"));
@@ -353,43 +227,20 @@ vector<ZZ_p> convert(vector<int> input)
 void runMPC(string norm_method, int pid,  string ownerIP, int ownerPort, int toOwnerPort,  string address1, int recPort1, int sendPort1, string address2, int recPort2, int sendPort2,int rowstart, int rowend, int permut, Logger& cisLogger, Logger& nominalLogger) //, atomic<int>& readyCounter, mutex& mtx, condition_variable& cv)
 {    
     mpc testmpc;
-    // std::promise<void> promise;
-    // std::future<void> future = promise.get_future();
-    // vector<vector<double>> resultVectors;
     testmpc.initialize(pid, ownerIP, ownerPort, toOwnerPort, address1, recPort1, sendPort1, address2, recPort2, sendPort2);
-    // if (norm_method == "deseq2")
-    // {
-    //     testmpc.receivePheno();
-    // // vector<ZZ_p> random = testmpc.Frand(4);
-    //     testmpc.logRatio();
-    // }
     auto invcdf_start = chrono::high_resolution_clock::now();
     for (int row=rowstart; row<rowend; row++)
     {
-        // cout << string("pid"+to_string(pid)+"_row"+to_string(row)+"\n");
-        // vector<double> row_result;
-        // cout << "start: " << std::time(nullptr) << endl;
-        // testmpc.ready();
-        // cout << "ready: " << std::time(nullptr) << endl;
         testmpc.permutPheno(permut);
-        // cout << "receiveSecrets: " << std::time(nullptr) << endl;
         testmpc.receiveGeno();
-        // cout << "receiveGeno: " << std::time(nullptr) << endl;
-        // testmpc.genperm(row, numCol, norm_method, permut);
-        // cout << "genperm: " << std::time(nullptr) << endl;
         testmpc.calc_corr(cisLogger, nominalLogger);
-        // cout << "testMatrix: " << std::time(nullptr) << endl;
-        // resultVectors.emplace_back(row_result);
         testmpc.clearVectors();
     }
     auto invcdf_end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = invcdf_end - invcdf_start;
     double durationInSeconds = duration.count();
     double durationInminutes = durationInSeconds/60.0;
-    // if (pid == 0)
-    //     cout << string("InverseCDF Execution time: " + to_string(durationInminutes) + " minutes\n") << endl;
     testmpc.close();
-    // swap(resultVector, resultVectors);
 }
 void setThreadAffinity(std::thread& thread, int coreId)
 {
@@ -420,13 +271,11 @@ bool isPortOpen(int port) {
     close(sockfd);
     return true;
 }
-void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vector<string>& address, int startrow, int endrow, string zscorefile, int CPU_core, int permut, Logger& cislogger, Logger& nominalLogger)
+void startMPCset(string norm_method, string split_set, vector<int>& availPorts, int startidx, vector<string>& address, int startrow, int endrow, int CPU_core, int permut, Logger& cislogger, Logger& nominalLogger)
 {
-    // cout << "startMpcset Start\n";
     vector<thread> threads;
-    // vector<vector<double>> resultVectors1,resultVectors2,resultVectors3;
-    thread dataClientThread(dataclient, norm_method, availPorts[startidx + 6], availPorts[startidx + 9], address[1], availPorts[startidx + 7], availPorts[startidx + 10], address[2], 
-    availPorts[startidx + 8], availPorts[startidx + 11], address[3], startrow, endrow, zscorefile, permut);
+    thread dataClientThread(dataclient, norm_method, split_set, availPorts[startidx + 6], availPorts[startidx + 9], address[1], availPorts[startidx + 7], availPorts[startidx + 10], address[2], 
+    availPorts[startidx + 8], availPorts[startidx + 11], address[3], startrow, endrow, permut);
     setThreadAffinity(dataClientThread,CPU_core+0);
     threads.emplace_back(move(dataClientThread));
 
@@ -435,16 +284,13 @@ void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vect
         runMPC(norm_method, 0, address[0], availPorts[startidx + 6], availPorts[startidx + 9], address[2], availPorts[startidx + 0], availPorts[startidx + 2], address[3], availPorts[startidx + 1], availPorts[startidx + 4], 
         startrow, endrow, permut,cislogger,nominalLogger);
     });
-    // thread runMPC1(runMPC, 0, address[0], availPorts[startidx + 6], availPorts[startidx + 9], address[2], availPorts[startidx + 0], availPorts[startidx + 2], address[3], availPorts[startidx + 1], availPorts[startidx + 4], startrow, endrow, resultVectors1);
     setThreadAffinity(runMPC1,CPU_core+1);
     threads.emplace_back(move(runMPC1));
 
-    // // int startidx2 = startidx;
     thread runMPC2([=, &cislogger,&nominalLogger]() {
         runMPC(norm_method, 1, address[0], availPorts[startidx + 7], availPorts[startidx + 10], address[3], availPorts[startidx + 3], availPorts[startidx + 5], address[1], availPorts[startidx + 2], availPorts[startidx + 0], 
         startrow, endrow,permut,cislogger,nominalLogger);
     });
-    // thread runMPC2(runMPC, 1, address[0], availPorts[startidx + 7], availPorts[startidx + 10], address[3], availPorts[startidx + 3], availPorts[startidx + 5], address[1], availPorts[startidx + 2], availPorts[startidx + 0], startrow, endrow, resultVectors2);
     setThreadAffinity(runMPC2,CPU_core+2);
     threads.emplace_back(move(runMPC2));
 
@@ -452,65 +298,27 @@ void startMPCset(string norm_method, vector<int>& availPorts, int startidx, vect
         runMPC(norm_method, 2, address[0], availPorts[startidx + 8], availPorts[startidx + 11], address[1], availPorts[startidx + 4], availPorts[startidx + 1], address[2], availPorts[startidx + 5], availPorts[startidx + 3], 
         startrow, endrow, permut,cislogger,nominalLogger);
     });
-    // thread runMPC3(runMPC, 2, address[0], availPorts[startidx + 8], availPorts[startidx + 11], address[1], availPorts[startidx + 4], availPorts[startidx + 1], address[2], availPorts[startidx + 5], availPorts[startidx + 3], startrow, endrow, resultVectors3);
     setThreadAffinity(runMPC3,CPU_core+2);
     threads.emplace_back(move(runMPC3));
     for (auto& thread : threads) {
         thread.join();
     }
-    // swap(finalVec, resultVectors1);
 }
 
-double cal_accuracy(vector<vector<double>>& predicted, string& filename, int startrow, int endrow)
-{
-    vector<vector<double>> actual = getMatrixFile(filename,startrow, endrow,true,true);
-    // vector<double> actual = CSVtoVector(filename);
-    // cout << string("actual matrix shape:" + to_string(actual.size())+ ","+to_string(actual[0].size())+"\n");
-    // cout << string("predicted matrix shape:" + to_string(predicted.size())+ ","+to_string(predicted[0].size())+"\n");
-    if (predicted.size() != actual.size()) {
-        cout << "predicted size: " + to_string(predicted.size()) << endl;
-        cout << "actual size: " + to_string(actual.size()) << endl;
-        // throw runtime_error("Vector sizes do not match");
-    }
-
-    double sumSquaredDiff = 0.0;
-    double max=0.0, min=0.0;
-    for (size_t i = 0; i < predicted.size(); ++i) {
-        for (size_t j=0; j<predicted[0].size(); ++j)
-        {
-            double diff = predicted[i][j] - actual[i][j];
-            sumSquaredDiff += diff * diff;
-            if (actual[i][j]>=max)
-                max=actual[i][j];
-            if (actual[i][j]<=min)
-                min=actual[i][j];
-        }
-        
-    }
-
-    double mse = sumSquaredDiff / (predicted.size()*predicted[0].size());
-    double rmse = sqrt(mse);
-    // cout << string("RMSE: " + to_string(rmse)) << endl;
-    double normalized = max-min;
-    // auto max = max_element(actual.begin(), actual.end());
-    // auto min = min_element(actual.begin(), actual.end());
-    // double normalized = *max - *min;
-    return 1.0 - rmse/normalized;
-
-}
 int main(int argc, char* argv[])
 {
     if (argc < 8)
     {
-        cout << "Please provide at least four arg: low, mid, high, permutation, zscorefile name, norm method, cislog, nominallog.\n";
+        cout << "Please provide at least four arg: low, mid, high, permutation, norm method, cislog, nominallog.\n";
         return 1;
     }
     int lo_row = stoi(argv[1]);
     int mid_row = stoi(argv[2]);
     int hi_row = stoi(argv[3]);
     int permut = stoi(argv[4]);
-    string zscorefile = argv[5];
-    string norm_method = argv[6];
+    // string zscorefile = argv[5]; // don't need zscores for scenario1
+    string norm_method = argv[5];
+    string split_set = argv[6];
     string cis_log = argv[7];
     string nominal_log = argv[8];
     int startingPort = 12300;
@@ -526,19 +334,13 @@ int main(int argc, char* argv[])
         }
         startingPort++;
     }
-    // print_vector(openPorts);
     vector<string> address{"localhost","localhost","localhost","localhost"};
 
     auto start = chrono::high_resolution_clock::now();
-    // cout << "Start time: " << std::time(nullptr) << endl;
     int numCores = thread::hardware_concurrency();
-    // mutex mtx;
-    // condition_variable cv;
-    // std::atomic<int> readyCounter(0);
     vector<thread> threads;
-    // vector<vector<double>> resultVec1,resultVec2,resultVec3,resultVec4;
-    string nominal = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/privateQTL_scenario1_"+nominal_log);
-    string cis = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/privateQTL_scenario1_" +cis_log);
+    string nominal = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/" + split_set + "/privateQTL_scenario1_"+split_set+"_"+nominal_log);
+    string cis = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/output/" + split_set + "/privateQTL_scenario1_"+split_set+"_"+cis_log);
     Logger nominallogger(nominal+"_"+to_string(lo_row)+"_"+to_string(mid_row)+".tsv"), cislogger(cis+"_"+to_string(lo_row)+"_"+to_string(mid_row)+".tsv");
     Logger nominallogger2(nominal+"_"+to_string(mid_row)+"_"+to_string(hi_row)+".tsv"),cislogger2(cis+"_"+to_string(mid_row)+"_"+to_string(hi_row)+".tsv");
     nominallogger.log(string("phenID\tvarID\tvarIdx\tdof\tr_nom\tr2_nom\ttstat\tpval\tslope\tslope_se"));
@@ -546,10 +348,10 @@ int main(int argc, char* argv[])
     nominallogger2.log(string("phenID\tvarID\tvarIdx\tdof\tr_nom\tr2_nom\ttstat\tpval\tslope\tslope_se"));
     cislogger2.log(string("phenID\tvarID\tvarIdx\tbeta_shape1\tbeta_shape2\ttrue_dof\tpval_true_df\tr_nom\tr2_nom\ttstat\tpval_nominal\tslope\tslope_se\tpval_perm\tpval_beta"));
     thread thread1([&]() {
-        startMPCset(norm_method, openPorts, 0, address, lo_row, mid_row, zscorefile, 0,permut,cislogger,nominallogger);
+        startMPCset(norm_method, split_set, openPorts, 0, address, lo_row, mid_row, 0,permut,cislogger,nominallogger);
     });
     thread thread2([&]() {
-        startMPCset(norm_method, openPorts, 12, address, mid_row, hi_row,zscorefile, 0, permut,cislogger2,nominallogger2);
+        startMPCset(norm_method, split_set, openPorts, 12, address, mid_row, hi_row, 0, permut,cislogger2,nominallogger2);
     });
 
     threads.emplace_back(move(thread1));
@@ -559,7 +361,6 @@ int main(int argc, char* argv[])
         thread.join();
     }
 
-    // resultVec1.insert(resultVec1.end(), resultVec2.begin(), resultVec2.end());
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> totalduration = end - start;
     double totaldurationInSeconds = totalduration.count();
