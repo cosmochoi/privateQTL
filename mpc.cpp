@@ -898,9 +898,11 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
         vector < double > permPvalues;
         double init_dof = this->permutMat[0].size()/2 - 2;
         double mean = 0.0, variance = 0.0, beta_shape1 = 1.0, beta_shape2 = 1.0;
-        // print_vector(r_perm);
+        
+        // cout << "init dof: "<<init_dof << endl;
         if (doublevariance(r_perm, doublemean(r_perm)) != 0.0) 
         {
+            cout << "learning degree of freedom" << endl;
             learnDF(r_perm, init_dof);
             //LOG.println("  * Effective degree of freedom = " + sutils::double2str(true_df, 4));
 		}
@@ -913,6 +915,7 @@ void mpc::calc_corr(Logger& cislogger, Logger& nominalLogger)
         if (cisVar.size()-1 > 1 && mean != 1.0) {
             beta_shape1 = mean * (mean * (1 - mean ) / variance - 1);
             beta_shape2 = beta_shape1 * (1 / mean - 1);
+            cout << "mleBeta" << endl;
             if (cisVar.size()-1 > 10) mleBeta(permPvalues, beta_shape1, beta_shape2);	//ML estimate if more than 10 variant in cis
         }
         // print_vector(r2_perm);

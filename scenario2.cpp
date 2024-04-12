@@ -123,7 +123,22 @@ void dataclient(string norm_method, string split_set, int sendport1, int recvpor
         // string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/blood_reads_matched_filtered.tsv"; // original order
         string matched = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/blood_reads_matched_filtered_" + split_set + ".tsv";
         vector<vector<uint64_t>> testp = getCountFromMatrixFile(matched,geneID);
-        vector<vector<double>> cpm_df = deseq2_cpm(testp);
+        /////TO DELETE FROM HERE
+        int sample_num = 600;
+        vector<vector<uint64_t>> sliced;
+        // Iterate over each inner vector
+        for (auto& innerVec : testp) {
+            vector<uint64_t> slice;
+            // Slice the inner vector up to sliceSize elements
+            for (int i = 0; i < sample_num && i < innerVec.size(); ++i) {
+                slice.push_back(innerVec[i]);
+            }
+            // Append the sliced inner vector to the result
+            sliced.push_back(slice);
+        }
+        cout << "sliced matrix size:" << sliced.size() << ", "<<sliced[0].size() << endl;
+        ///TO HERE
+        vector<vector<double>> cpm_df = deseq2_cpm(sliced); ///CHANGE TO testp
 
         vector<vector<uint64_t>> phenoshares;
         for (int i = 0; i < 3; i++) {
@@ -273,13 +288,20 @@ void dataclient(string norm_method, string split_set, int sendport1, int recvpor
             string zscore_filename = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/"+zscorefile+".txt");
             string original = string("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/zscores.txt");
             vector<double> zscore_input = CSVtoVector(zscore_filename);
+            ////CHANGE FROM HERE
+            int sample_num = 600;
+            vector<double> zscore_sliced;
+            for (int i = 0; i < sample_num && i < zscore_input.size(); ++i) {
+                zscore_sliced.push_back(zscore_input[i]);
+            }
+            ////TO HERE
             vector<double> pre_centered = CSVtoVector(original);
             double pheno_var =doublevariance(pre_centered, doublemean(pre_centered));//0.9782648500530864;// 0.9596748533543238; //TODO::Don't put manual numbers here 
 
-            auto min = min_element(zscore_input.begin(), zscore_input.end());
+            auto min = min_element(zscore_sliced.begin(), zscore_sliced.end()); // CHANGE to zscore_input
             double shiftsize = abs(*min);
             // cout << "shift size: " << shiftsize << endl;
-            vector<int64_t> zscores_scaled = ScaleVector_signed(zscore_input, pow(10,7));
+            vector<int64_t> zscores_scaled = ScaleVector_signed(zscore_sliced, pow(10,7));// CHANGE to zscore_input
             
             uint64_t inv = PowerMod(3, -1, p);
             vector<uint64_t> vectorsize{(uint64_t) bitInput.size(), (uint64_t) bitInput[0].size(), p, inv};
@@ -654,18 +676,18 @@ int main(int argc, char* argv[])
     cout << "Final output: " << resultVec1.size() << ", "<<resultVec1[0].size() << endl;
     cout << resultVec1[0][0] << ", " << resultVec1[0][1] << ", " <<resultVec1[0][2]<<", " <<resultVec1[0][3] << endl;
     cout << resultVec1[1][0] << ", " << resultVec1[1][1] << ", " <<resultVec1[1][2]<<", " <<resultVec1[1][3] << endl;
-    writeNormalizedToTSV(resultVec1, gene_string1, "private_deseq2_invcdf_" + split_set);
+    // writeNormalizedToTSV(resultVec1, gene_string1, "private_deseq2_invcdf_" + split_set);
     
     // PCA(resultVec1, pheno_cov, 17);
     // cout << "Covariates: " << pheno_cov.size() << ", " << pheno_cov[0].size() <<endl;
     int siteA_n;
     int siteB_n;
     int siteC_n;
-    if (split_set == "set1")
+    if (split_set == "set1") ///CHANGE THIS
     {
-        siteA_n = 300;
-        siteB_n = 250;
-        siteC_n = 120;
+        siteA_n = 200;//300;
+        siteB_n = 200;//250;
+        siteC_n = 200;//120;
     }
     else
     {
@@ -695,9 +717,9 @@ int main(int argc, char* argv[])
     PCA(siteA, siteA_cov, 0.4);
     PCA(siteB, siteB_cov, 0.4);
     PCA(siteC, siteC_cov, 0.4);
-    writematrixToTSV(siteA_cov, "private_deseq2_invcdf_"+split_set+"_siteA_pc");
-    writematrixToTSV(siteB_cov, "private_deseq2_invcdf_"+split_set+"_siteB_pc");
-    writematrixToTSV(siteC_cov, "private_deseq2_invcdf_"+split_set+"_siteC_pc");
+    // writematrixToTSV(siteA_cov, "private_deseq2_invcdf_"+split_set+"_siteA_pc");
+    // writematrixToTSV(siteB_cov, "private_deseq2_invcdf_"+split_set+"_siteB_pc");
+    // writematrixToTSV(siteC_cov, "private_deseq2_invcdf_"+split_set+"_siteC_pc");
     Residualizer res1(siteA_cov);
     Residualizer res2(siteB_cov);
     Residualizer res3(siteC_cov);
@@ -709,7 +731,8 @@ int main(int argc, char* argv[])
         res_A[i].insert(res_A[i].end(), res_C[i].begin(), res_C[i].end());
     }
     cout << "residualized shape: \n" << res_A.size() << ", " << res_A[0].size() <<endl;
-    writeNormalizedToTSV(res_A, gene_string1, "private_deseq2_invcdf_"+split_set+"_residualized");
+    string to_write = "private_deseq2_invcdf_"+split_set+"_residualized_600"; //CHANGE
+    writeNormalizedToTSV(res_A, gene_string1, to_write);
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> totalduration = end - start;
     double totaldurationInSeconds = totalduration.count();

@@ -40,7 +40,8 @@ void dataclient(string norm_method, string split_set, int sendport1, int recvpor
     string pheno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/bed_template.tsv";
     // string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_genotype.tsv";
     // string geno_matrix = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_genotype_1kGresidualized.tsv";
-    string geno_matrix = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/genotype/re/genotype_imputed_projected_residualized_" + split_set +"_concatenated.tsv";
+    // string geno_matrix = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/genotype/re/genotype_imputed_projected_residualized_" + split_set +"_concatenated.tsv"; // scn1 and scn2 projected matrix
+    string geno_matrix = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/script2/time_measure/data/projected_500_concatenated.tsv"; // For sample size testing
     string geno_pos = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/GTEx_v8_blood_WGS_variant.tsv";
     // string pheno_cov = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/pheno_blood_18PCs.tsv";//qn PCA
     // string pheno_cov = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/phenotype/covariate_deseq_pca.csv";
@@ -73,22 +74,47 @@ void dataclient(string norm_method, string split_set, int sendport1, int recvpor
         else if (norm_method == "deseq2"){
             // pheno_file = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/phenotype/sorted_blood_rnaseq_deseq_invCDF.bed";
             // pheno_file = "/gpfs/commons/groups/gursoy_lab/ykim/QTL_proj/run/data/phenotype/concatenated_residualized_deseq.bed"; //scenario1
-            pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/private_deseq2_invcdf_"+split_set+"_residualized.bed"; //scenario2_matmult
+            // pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/private_deseq2_invcdf_"+split_set+"_residualized.bed"; //scenario2_matmult
+            pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/private_deseq2_invcdf_"+split_set+"_residualized_500.tsv"; // scenario2 sample runtime testing
         }
         // string pheno_file = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/rnaseq/data/blood/mis_acc.qn.bed";
         vector<double> norm_pheno;
-        read_bedfile_row(norm_pheno,geneID, pheno_file, r,4,true);
+        // read_bedfile_row(norm_pheno,geneID, pheno_file, r,4,true);
+        read_bedfile_row(norm_pheno,geneID, pheno_file, r,0,false);
         // vector<double> pheno_res = res.transform(norm_pheno);
+        //////TO ERASE, for testing----------- FROM HERE
+        // vector<double> sliced_pheno;
+        // int sample_num = 200;
+        // for (int i = 0; i < std::min(sample_num, static_cast<int>(norm_pheno.size())); ++i) {
+        //     sliced_pheno.push_back(norm_pheno[i]);
+        // }
+        // double bed_var = center_normalize_vec(sliced_pheno);
+        //////TO ERASE, for testing----------- TO HERE
         double bed_var = center_normalize_vec(norm_pheno);
-        cout << "pheno var: " << bed_var << endl;
-        vector<int64_t> pheno = ScaleVector_signed(norm_pheno, pow(10,6)); // integer version of secret
+        // cout << "pheno var: " << bed_var << endl;
+        vector<int64_t> pheno = ScaleVector_signed(norm_pheno, pow(10,6)); // integer version of secret CHANGE
         
-        cout << string("bed file phenotype var: "+to_string(bed_var)+"\n");
+        cout << string("bed file phenotype var: "+to_string(bed_var)+" and phenotype length: ") << pheno.size()<< endl;;
         vector<uint64_t> range;
         string chromosome = testinput.getCisRange(geneID,range);
 
         vector<vector<double>> slicedgeno = testinput.sliceGeno(range, chromosome, -1,cisVariants);
         // vector<vector<double>> geno_res = res.transform(slicedgeno);
+        /////FOR SAMPLE TESTING;;; TO DELETE FROM HERE and change slice to slicedgeno
+        // vector<vector<double>> sliced;
+        // // Iterate over each inner vector
+        // for (auto& innerVec : slicedgeno) {
+        //     vector<double> slice;
+        //     // Slice the inner vector up to sliceSize elements
+        //     for (int i = 0; i < sample_num && i < innerVec.size(); ++i) {
+        //         slice.push_back(innerVec[i]);
+        //     }
+        //     // Append the sliced inner vector to the result
+        //     sliced.push_back(slice);
+        // }
+        // cout << "sliced geno size:" << sliced.size() << ", "<<sliced[0].size() << endl;
+        ////TO HERE
+        
         geno_var = center_normalize(slicedgeno);
         
         // vector<vector<double>> geno_res = getMatrixFile("/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/pQTL_row_0_geno_centered_resd.tsv", 0, 3000, false, false);

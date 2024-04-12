@@ -133,7 +133,13 @@ void read_bedfile_row(vector<double>& rowData, string& geneID, const string& fil
 
             while (getline(lineStream, cell, '\t')) 
             {
-                if (currentColumn < skipcols) {
+                if (currentColumn == 0 && skipcols == 0) {
+                    // cout << "currentColumn "<< currentColumn << endl;
+                    geneID = cell;
+                    currentColumn++;
+                    continue;
+                }
+                else if (currentColumn < skipcols) {
                     if (currentColumn == skipcols-1)
                         geneID = cell;
                     currentColumn++;
@@ -496,13 +502,17 @@ struct data_to_function {
 
 };
 double degreeOfFreedom(const gsl_vector *v, void *params) {
-    pair<vector<double>*, double>* p = static_cast<pair<vector<double>*, double>*>(params);	
-    vector<double>& corr = *(p->first);
-    vector < double > pval = vector < double >(corr.size(), 0.0);
-    
+    // pair<vector<double>*, double>* p = static_cast<pair<vector<double>*, double>*>(params);	
+    // vector<double>& corr = *(p->first);
+    // vector < double > pval = vector < double >(corr.size(), 0.0);
+    // pair<int, double*>* p = static_cast<pair<int, double*>*> (params);
+    data_to_function * d = (data_to_function *) params;
+    // int size = p->first;
+    // double* corrs = p->second;
+    vector < double > pval = vector < double >(d->n, 0.0);
 	double mean = 0.0;
-	for (int c = 0 ; c < corr.size() ; c++) {
-		pval[c] = getPvalue(corr[c], gsl_vector_get(v, 0));
+	for (int c = 0 ; c < d->n ; c++) {
+		pval[c] = getPvalue(d->C[c], gsl_vector_get(v, 0));
 		mean += pval[c];
 	}
 	mean /= pval.size();
@@ -515,7 +525,7 @@ double degreeOfFreedom(const gsl_vector *v, void *params) {
 	return shape2;
 }
 int learnDF(vector < double > & corr, double & df) {
-
+    // writeVectorToTSV(corr,string("testr_perm"));
 	//Set starting point to moment matching estimates
 	gsl_vector * x = gsl_vector_alloc (1);
 	gsl_vector_set (x, 0, df);
@@ -524,18 +534,24 @@ int learnDF(vector < double > & corr, double & df) {
 	gsl_vector * ss = gsl_vector_alloc (1);
 	gsl_vector_set (ss, 0, df * 0.1);
 
-	pair<vector<double>*, double> params(&corr, df);
-
+	// pair<vector<double>*, double> params(&corr, df);
+    data_to_function * par  = new data_to_function (corr.size(), &corr[0]);
+    cout << "1" << endl;
+    // pair<int, double*> params (corr.size(), &corr[0]);
+    cout << "2" << endl;
 	gsl_multimin_function minex_func;
 	minex_func.n = 1;
 	minex_func.f = degreeOfFreedom;
-	minex_func.params = &params;
-
+	// minex_func.params = &params;
+    minex_func.params = (void*)par;
+    cout << "3" << endl;
 	//Initialize optimization machinery
 	const gsl_multimin_fminimizer_type * T = gsl_multimin_fminimizer_nmsimplex2;
+    cout << "3.1" << endl;
 	gsl_multimin_fminimizer * s = gsl_multimin_fminimizer_alloc (T, 1);
+    cout << "3.2" << endl;
 	gsl_multimin_fminimizer_set (s, &minex_func, x, ss);
-
+    cout << "4" << endl;
 	//Optimization iteration
 	//cout << "\n ========================" << endl;
 	size_t iter = 0;
@@ -547,7 +563,7 @@ int learnDF(vector < double > & corr, double & df) {
 		if (status) break;
 		size = gsl_multimin_fminimizer_size (s);
 		status = gsl_multimin_test_size (size, 0.01);
-		//printf ("%d %10.3e f() = %7.10f size = %.10f\n", iter, gsl_vector_get (s->x, 0), s->fval, size);
+		// printf ("%d %10.3e f() = %7.10f size = %.10f\n", iter, gsl_vector_get (s->x, 0), s->fval, size);
 
 	} while (status == GSL_CONTINUE && iter < 20);
 
