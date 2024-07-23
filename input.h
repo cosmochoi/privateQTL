@@ -32,7 +32,7 @@ public:
     prepareInput(string& pheno_pos, string& geno_matrix, string& geno_pos, uint64_t window);
     string getCisRange(string geneID, vector<uint64_t>& positions);
     vector<uint64_t> getSNPrange(uint64_t start, uint64_t end, string chr, vector<string>& cisSnpIds);
-    vector<vector<double>> sliceGeno(vector<uint64_t> positions, string& chr, int64_t missing, vector<string>& cisSNPs);
+    int sliceGeno(vector<uint64_t> positions, string& chr, int64_t missing, vector<string>& cisSNPs, vector<vector<double>>& slicedmatrix);
 private:
     // Add any private member functions or variables if needed
 };
