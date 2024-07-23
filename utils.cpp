@@ -266,7 +266,7 @@ vector<vector<double>> getCovariates(const string& filename) {
     cout << "leaving getcovariates.\n";
     return rowsData;
 }
-vector<vector<uint64_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID) {
+vector<vector<uint64_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID, int skipcols) {
     vector<vector<uint64_t>> rowsData;
     ifstream data(filename);
     string line;
@@ -281,9 +281,13 @@ vector<vector<uint64_t>> getCountFromMatrixFile(const string& filename, vector<s
         // int currentColumn = 0;
 
         // Skip the first two columns
-        getline(lineStream, cell, '\t');
-        geneID.push_back(cell);
-        getline(lineStream, cell, '\t');
+        for (int i=0; i<skipcols; i++){
+            getline(lineStream, cell, '\t');
+            if (i==0) {geneID.push_back(cell);}
+        }
+        // getline(lineStream, cell, '\t');
+        // geneID.push_back(cell);
+        // getline(lineStream, cell, '\t');
 
         vector<uint64_t> rowVector;
         while (getline(lineStream, cell, '\t')) {
@@ -536,22 +540,22 @@ int learnDF(vector < double > & corr, double & df) {
 
 	// pair<vector<double>*, double> params(&corr, df);
     data_to_function * par  = new data_to_function (corr.size(), &corr[0]);
-    cout << "1" << endl;
+    // cout << "1" << endl;
     // pair<int, double*> params (corr.size(), &corr[0]);
-    cout << "2" << endl;
+    // cout << "2" << endl;
 	gsl_multimin_function minex_func;
 	minex_func.n = 1;
 	minex_func.f = degreeOfFreedom;
 	// minex_func.params = &params;
     minex_func.params = (void*)par;
-    cout << "3" << endl;
+    // cout << "3" << endl;
 	//Initialize optimization machinery
 	const gsl_multimin_fminimizer_type * T = gsl_multimin_fminimizer_nmsimplex2;
-    cout << "3.1" << endl;
+    // cout << "3.1" << endl;
 	gsl_multimin_fminimizer * s = gsl_multimin_fminimizer_alloc (T, 1);
-    cout << "3.2" << endl;
+    // cout << "3.2" << endl;
 	gsl_multimin_fminimizer_set (s, &minex_func, x, ss);
-    cout << "4" << endl;
+    // cout << "4" << endl;
 	//Optimization iteration
 	//cout << "\n ========================" << endl;
 	size_t iter = 0;
@@ -769,28 +773,28 @@ double center_normalize_vec(vector<double>& row) {
 }
 
 // template <typename T>
-void writematrixToTSV(const vector<vector<double>>& data, const string& name)
-{
-    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name  + ".tsv";
-    ofstream file(filename);
-    if (file.is_open())
-    {
-        for (int i = 0; i < data.size(); ++i)
-        {
-            for (const double& value : data[i])
-            {
-                file << value << "\t";
-            }
-            file << std::endl;
-        }
-        file.close();
-        cout << string(name+" matrix successfully written to TSV file.") << endl;
-    }
-    else
-    {
-        cout << "Error opening the file." << endl;
-    }
-}
+// void writematrixToTSV(const vector<vector<T>>& data, const string& name)
+// {
+//     string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name  + ".tsv";
+//     ofstream file(filename);
+//     if (file.is_open())
+//     {
+//         for (int i = 0; i < data.size(); ++i)
+//         {
+//             for (const T& value : data[i])
+//             {
+//                 file << value << "\t";
+//             }
+//             file << std::endl;
+//         }
+//         file.close();
+//         cout << string(name+" matrix successfully written to TSV file.") << endl;
+//     }
+//     else
+//     {
+//         cout << "Error opening the file." << endl;
+//     }
+// }
 void writeNormalizedToTSV(const vector<vector<double>>& data, const vector<string>& gene_strings, const string& name)
 {
     string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name  + ".tsv";
@@ -818,25 +822,7 @@ void writeNormalizedToTSV(const vector<vector<double>>& data, const vector<strin
     }
 }
 
-template <typename T>
-void writeVectorToTSV(const vector<T>& data, string name)
-{
-    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + ".tsv";
-    ofstream file(filename);
-    if (file.is_open())
-    {
-        for (const T& value : data)
-        {
-            file << value << "\t";
-        }
-        file.close();
-        cout << string(name+ " vector successfully written to CSV file.") << endl;
-    }
-    else
-    {
-        cout << "Error opening the file." << endl;
-    }
-}
+
 vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index) {
     vector<vector<double>> rowsData;
     ifstream data(filename);

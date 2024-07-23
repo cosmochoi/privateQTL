@@ -56,7 +56,7 @@ vector<double> getRowFromMatrixFile(string& filename, int rowIndex);
 void read_bedfile_row(vector<double>& rowData, string& geneID, const string& filename, int row, int skipcols, bool header);
 vector<vector<double>> getTPMFromMatrixFile(const string& filename, vector<string>& geneID);
 vector<vector<double>> getCovariates(const string& filename);
-vector<vector<uint64_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID);
+vector<vector<uint64_t>> getCountFromMatrixFile(const string& filename, vector<string>& geneID, int skipcols);
 vector<uint64_t> ScaleVector(vector<double> &v, int k);
 vector<vector<int64_t>> ScaleVector(vector<vector<double>>& v, int k);
 vector<int64_t> ScaleVector_signed(vector<double> &v, int k);
@@ -79,10 +79,50 @@ void PCA(vector<vector<double>>& data, vector<vector<double>>& pc, int n_compone
 vector<double> center_normalize(vector<vector<double>>& M);
 double center_normalize_vec(vector<double>& M);
 // template <typename T>
-void writematrixToTSV(const vector<vector<double>>& data, const string& name);
+// void writematrixToTSV(const vector<vector<T>>& data, const string& name);
+template <typename T>
+void writematrixToTSV(const vector<vector<T>>& data, const string& name)
+{
+    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name  + ".tsv";
+    ofstream file(filename);
+    if (file.is_open())
+    {
+        for (int i = 0; i < data.size(); ++i)
+        {
+            for (const T& value : data[i])
+            {
+                file << value << "\t";
+            }
+            file << std::endl;
+        }
+        file.close();
+        cout << string(name+" matrix successfully written to TSV file.") << endl;
+    }
+    else
+    {
+        cout << "Error opening the file." << endl;
+    }
+}
 void writeNormalizedToTSV(const vector<vector<double>>& data, const vector<string>& gene_strings, const string& name);
 template <typename T>
-void writeVectorToTSV(const vector<T>& data, string name);
+void writeVectorToTSV(const vector<T>& data, string name)
+{
+    string filename = "/gpfs/commons/groups/gursoy_lab/aychoi/eqtl/mpc/securesort/output/" + name + ".tsv";
+    ofstream file(filename);
+    if (file.is_open())
+    {
+        for (const T& value : data)
+        {
+            file << value << "\t";
+        }
+        file.close();
+        cout << string(name+ " vector successfully written to CSV file.") << endl;
+    }
+    else
+    {
+        cout << "Error opening the file." << endl;
+    }
+}
 vector<vector<double>> getMatrixFile(const string& filename, int startrow, int endrow, bool header, bool index);
 template <typename T>
 void print_vector(vector<vector<T>> printme);
@@ -93,23 +133,28 @@ public:
     Residualizer(const vector<vector<double>>& covariates) {
         // Convert vector of vectors to Eigen matrix
         MatrixXd C_t = vectorOfVectorsToEigenMatrix(covariates);
-        MatrixXd test = C_t.rowwise() - C_t.colwise().mean();
-        Eigen::HouseholderQR<MatrixXd> qr(test);
+        cout << "inside constructor: "<< covariates.size() << ", " << covariates[0].size() << endl;
+        Eigen::VectorXd col_means = C_t.colwise().mean();
+        cout << col_means << endl;
+        MatrixXd centered_C_t = C_t.rowwise() - col_means.transpose();
+        Eigen::HouseholderQR<MatrixXd> qr(centered_C_t);
         // Q_t = qr.householderQ();
-        Q_t = qr.householderQ() * MatrixXd::Identity(test.rows(),test.cols());
+        Q_t = qr.householderQ() * MatrixXd::Identity(centered_C_t.rows(),centered_C_t.cols());
         dof = C_t.rows() - 2 - C_t.cols();
+        // cout << centered_C_t(0,0) << ", " << centered_C_t(0,1) << ", " << centered_C_t(0,2) << endl;
+        // cout << centered_C_t(1,0) << ", " << centered_C_t(1,1) << ", " << centered_C_t(1,2) << endl;
     }
     vector<vector<double>> transform(const vector<vector<double>>& M_t, bool center = true) {
         // Convert vector of vectors to Eigen matrix
-        // cout << "start transform function. "<< endl;
+        cout << "start transform function. "<< endl;
         MatrixXd M_t_matrix = vectorOfVectorsToEigenMatrix(M_t);
-
+        
         // Residualize rows of M wrt columns of C
-        // cout << "befpre M0_t" << endl;
+        cout << "befpre M0_t" << endl;
         MatrixXd M0_t = M_t_matrix.colwise() - M_t_matrix.rowwise().mean();
-        // cout << "M0_t made." << endl;
+        cout << "M0_t made." << endl;
         if (center) {
-            M0_t -= M0_t * Q_t * Q_t.transpose();
+            M0_t = M0_t - M0_t * Q_t * Q_t.transpose();
         } else {
             M0_t = M_t_matrix - M0_t * Q_t * Q_t.transpose();
         }
@@ -127,9 +172,9 @@ public:
         Eigen::Matrix<double, 1, Eigen::Dynamic> M0_t = M_t_matrix.array() - M_t_matrix.mean();
         // cout << M0_t.rows()<<","<<M0_t.cols() << "/"<< Q_t.rows() << "," << Q_t.cols() << endl;
         if (center) {
-            M0_t.noalias() = M0_t - M0_t * Q_t * Q_t.transpose();
+            M0_t.noalias() = M0_t - (M0_t * Q_t) * Q_t.transpose();
         } else {
-            M0_t.noalias() = M_t_matrix - M0_t * Q_t * Q_t.transpose();
+            M0_t.noalias() = M_t_matrix - (M0_t * Q_t) * Q_t.transpose();
         }
 
         // Convert Eigen matrix to vector
